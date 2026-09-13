@@ -1,0 +1,193 @@
+@import "tailwindcss";
+
+/* Identidade do Verso: mesa de estúdio escura. Petróleo profundo como chão,
+   âmbar de VU meter como único acento. */
+@theme {
+  --color-ground: #0c1316;
+  --color-surface: #121c20;
+  --color-surface-2: #18262b;
+  --color-line: #25373d;
+  --color-line-soft: #1d2d32;
+  --color-ink: #e6eeef;
+  --color-ink-2: #9eb1b5;
+  --color-ink-3: #6f8388;
+  --color-amber: #e8a33d;
+  --color-amber-bright: #f5b959;
+  --color-amber-soft: #33270f;
+  --color-ok: #74b490;
+  --color-risk: #db7a74;
+
+  --font-display: "Bricolage Grotesque", "Helvetica Neue", sans-serif;
+  --font-body: "Source Serif 4", Georgia, serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+}
+
+html,
+body {
+  background: var(--color-ground);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-amber-bright);
+  outline-offset: 2px;
+}
+
+/* A palavra que o modelo não teve certeza. Ela é o primeiro lugar para olhar. */
+.low-confidence {
+  border-bottom: 2px dotted var(--color-risk);
+  color: var(--color-risk);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Destaque palavra a palavra no player.
+
+   O preenchimento parcial da palavra atual é um gradiente recortado no próprio
+   texto (background-clip: text). A posição do corte vem de --kw-fill, escrita
+   direto no DOM a cada quadro — sem re-render do React.
+
+   Fazer isso por palavra, e não com um gradiente no verso inteiro, é o que
+   mantém o efeito correto quando o verso quebra em mais de uma linha.
+--------------------------------------------------------------------------- */
+.kw {
+  --kw-sung: var(--color-amber);
+  --kw-unsung: rgba(230, 238, 239, 0.38);
+  color: var(--kw-unsung);
+  transition: color 140ms linear;
+}
+
+.kw-sung {
+  color: var(--kw-sung);
+}
+
+.kw-now {
+  background-image: linear-gradient(
+    to right,
+    var(--kw-sung) var(--kw-fill, 0%),
+    var(--kw-unsung) var(--kw-fill, 0%)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  transition: none;
+}
+
+/* Sem o recorte no texto, o gradiente pintaria um retângulo por cima da palavra. */
+@supports not ((background-clip: text) or (-webkit-background-clip: text)) {
+  .kw-now {
+    background-image: none;
+    color: var(--kw-sung);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kw {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Imagem de fundo viva.
+
+   transform e filter são compostos pela GPU: animar estas duas propriedades
+   não dispara recálculo de layout, por isso o efeito cabe no mesmo quadro em
+   que a letra é desenhada. A escala mínima evita que as bordas apareçam
+   quando a imagem respira.
+--------------------------------------------------------------------------- */
+.backdrop-live {
+  /* Estado de repouso igual à base do efeito, para não haver salto no primeiro
+     quadro. A escala mínima também dá margem ao deslocamento lateral, senão a
+     borda da imagem apareceria ao lado. */
+  transform: scale(1.05);
+  transform-origin: center;
+  will-change: transform, filter;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop-live {
+    /* Sem movimento: a imagem fica parada e legível. */
+    transform: none !important;
+    filter: none !important;
+    will-change: auto;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Camadas do efeito de vídeo analógico.
+
+   Todas ficam acima da imagem e abaixo do texto, sem capturar clique. O que
+   muda por quadro é sempre transform, opacity ou background-position — nenhuma
+   delas dispara recálculo de layout.
+--------------------------------------------------------------------------- */
+.fx-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Cópia da imagem puxada para o vermelho e deslocada: é o que separa as cores
+   na borda dos objetos, como fita com trilha de croma degradada. */
+.fx-chroma {
+  mix-blend-mode: screen;
+  filter: sepia(1) saturate(6) hue-rotate(-28deg);
+  object-fit: cover;
+  height: 100%;
+  width: 100%;
+}
+
+/* Linhas de varredura. O passo em pixels (não em %) mantém a espessura certa
+   em qualquer tamanho de tela. */
+.fx-scanlines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.55) 0px,
+    rgba(0, 0, 0, 0.55) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+/* Ruído de fita. A textura vem de um SVG embutido — nenhuma requisição — e é
+   deslocada a cada quadro para chiar. */
+.fx-noise {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.85'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  mix-blend-mode: overlay;
+}
+
+/* Faixa de rastreamento ruim: a imagem "escorrega" lateralmente numa fatia. */
+.fx-tracking {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.02),
+    rgba(255, 255, 255, 0.16),
+    rgba(255, 255, 255, 0.02)
+  );
+  backdrop-filter: blur(1.5px) saturate(1.4);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-noise,
+  .fx-tracking,
+  .fx-chroma {
+    display: none;
+  }
+}

@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Ambiente
+.env
+.env.local
+
+# Dados locais: áudio enviado e stems separados nunca vão para o git
+storage/
+!storage/.gitkeep
+
+# Cache de modelos ML (~3 GB)
+infra/models/
+
+# Sistema
+.DS_Store

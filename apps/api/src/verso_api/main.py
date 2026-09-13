@@ -1,0 +1,50 @@
+"""Aplicação FastAPI.
+
+Casca fina: as rotas traduzem HTTP para os casos de uso de packages/.
+"""
+
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from verso_core.config import get_settings
+
+from verso_api.queue import close_pool
+from verso_api.routers import jobs, lyrics, tracks
+
+settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    settings.originals_dir.mkdir(parents=True, exist_ok=True)
+    settings.vocals_dir.mkdir(parents=True, exist_ok=True)
+    yield
+    await close_pool()
+
+
+app = FastAPI(
+    title="Verso",
+    description="Transcreve música em letra editável e sincroniza como karaokê.",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(tracks.router)
+app.include_router(lyrics.router)
+app.include_router(jobs.router)
+
+
+@app.get("/health", tags=["sistema"])
+async def health() -> dict[str, str]:
+    return {"status": "ok"}

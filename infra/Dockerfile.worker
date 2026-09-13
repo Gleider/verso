@@ -1,0 +1,26 @@
+FROM python:3.12-slim
+
+# ffmpeg para o áudio. Rust porque `sphn` (dependência do Demucs) não publica
+# wheel para Linux arm64 — em Mac com Apple Silicon ele precisa ser compilado.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg curl build-essential pkg-config cmake libopus-dev \
+    && curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain stable \
+    && rm -rf /var/lib/apt/lists/*
+ENV PATH="/root/.cargo/bin:$PATH"
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+COPY pyproject.toml uv.lock* ./
+# Todos os membros do workspace precisam existir para o uv resolver, mesmo que
+# apenas um deles seja instalado abaixo.
+COPY packages ./packages
+COPY apps/api ./apps/api
+COPY apps/worker ./apps/worker
+
+# Aqui os extras de ML entram: torch, demucs e faster-whisper (~2 GB).
+RUN uv sync --frozen --no-dev --package verso-worker --extra ml
+
+ENV PATH="/app/.venv/bin:$PATH"
+
+CMD ["arq", "verso_worker.main.WorkerSettings"]

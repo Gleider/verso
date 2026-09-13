@@ -1,0 +1,61 @@
+[project]
+name = "verso"
+version = "0.1.0"
+description = "Transcreve música em letra editável e sincroniza como karaokê"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "verso-core",
+    "verso-audio",
+    "verso-asr",
+    "verso-lyrics",
+    "verso-video",
+    "verso-api",
+    "verso-worker",
+]
+
+[project.optional-dependencies]
+# Pesado (~2 GB). Só o worker precisa; a API sobe sem nada disso.
+ml = ["verso-audio[separation]", "verso-asr[whisper]"]
+
+[tool.uv.workspace]
+members = ["packages/*", "apps/api", "apps/worker"]
+
+[tool.uv.sources]
+verso-core = { workspace = true }
+verso-audio = { workspace = true }
+verso-asr = { workspace = true }
+verso-lyrics = { workspace = true }
+verso-video = { workspace = true }
+verso-api = { workspace = true }
+verso-worker = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+    "ruff>=0.8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Injeção de dependência do FastAPI: chamar Depends/File/Query no default é a
+# assinatura idiomática do framework, não o bug que o B008 procura.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Query",
+    "fastapi.Body",
+]
