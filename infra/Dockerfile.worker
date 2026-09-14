@@ -21,6 +21,12 @@ COPY apps/worker ./apps/worker
 # Aqui os extras de ML entram: torch, demucs e faster-whisper (~2 GB).
 RUN uv sync --frozen --no-dev --package verso-worker --extra ml
 
+# O ctranslate2 (motor do faster-whisper) é build CUDA 12 e carrega o
+# libcublas/libcudart dinamicamente, enquanto o torch traz as libs cu13.
+# Instalamos as libs cu12 e expomos tudo no LD_LIBRARY_PATH para a GPU funcionar.
+RUN uv pip install nvidia-cublas-cu12 nvidia-cuda-runtime-cu12
+ENV LD_LIBRARY_PATH="/app/.venv/lib/python3.12/site-packages/nvidia/cublas/lib:/app/.venv/lib/python3.12/site-packages/nvidia/cuda_runtime/lib:/app/.venv/lib/python3.12/site-packages/nvidia/cudnn/lib:/app/.venv/lib/python3.12/site-packages/nvidia/cu13/lib"
+
 ENV PATH="/app/.venv/bin:$PATH"
 
 CMD ["arq", "verso_worker.main.WorkerSettings"]

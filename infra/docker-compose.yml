@@ -57,8 +57,19 @@ services:
       # Em contêiner não há MPS: a separação roda em CPU e fica mais lenta.
       VERSO_DEMUCS_DEVICE: ${VERSO_DEMUCS_DEVICE:-cpu}
       VERSO_WHISPER_MODEL: ${VERSO_WHISPER_MODEL:-large-v3}
+      VERSO_WHISPER_DEVICE: ${VERSO_WHISPER_DEVICE:-cpu}
+      VERSO_WHISPER_COMPUTE: ${VERSO_WHISPER_COMPUTE:-int8}
       TORCH_HOME: /models
       HF_HOME: /models
+    # Em máquinas com GPU NVIDIA (Docker Desktop/WSL2 ou Linux nativo), o worker
+    # pode usá-la. Sem GPU disponível o compose ignora a reserva e segue em CPU.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     volumes:
       - ../storage:/data
       # Sem este volume, cada rebuild rebaixa ~3 GB de modelo.

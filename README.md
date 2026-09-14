@@ -75,6 +75,21 @@ Funciona, e para experimentar é suficiente. Se for usar de verdade, vale rodar
 **só o worker fora do Docker** (ver a seção seguinte): ele passa a usar a GPU
 integrada e cai para poucos minutos por faixa.
 
+**Exceção: GPU NVIDIA.** Em máquinas com NVIDIA (Docker Desktop/WSL2 no
+Windows ou Linux nativo com NVIDIA Container Toolkit), o compose já reserva a
+GPU para o worker. Basta ajustar no `.env` antes de subir:
+
+```bash
+VERSO_WHISPER_DEVICE=cuda
+VERSO_WHISPER_COMPUTE=float16
+VERSO_DEMUCS_DEVICE=cuda
+```
+
+O pipeline inteiro roda na GPU — a transcrição cai para poucos minutos por
+faixa sem sair do Docker. Atenção à VRAM: o `large-v3` em float16 pede ~6 GB;
+com 6 GB ou menos, prefira `distil-large-v3`. Em Mac (Apple Silicon) essas
+variáveis não têm efeito — o MPS não passa para o Docker.
+
 Para acelerar sem sair do Docker, troque o modelo no `.env` antes de subir:
 
 ```bash
