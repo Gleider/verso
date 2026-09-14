@@ -13,9 +13,15 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@remotion/bundler": "4.0.524",
+    "@remotion/fonts": "4.0.524",
+    "@remotion/media-utils": "4.0.524",
+    "@remotion/player": "4.0.524",
+    "@remotion/renderer": "4.0.524",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "remotion": "4.0.524",
     "wavesurfer.js": "^7.8.6"
   },
   "devDependencies": {

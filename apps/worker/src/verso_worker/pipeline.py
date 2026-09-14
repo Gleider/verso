@@ -6,6 +6,7 @@ frustrante — ver `verso_audio.separate`.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -119,10 +120,22 @@ async def transcribe_track(ctx: dict, track_id: str, job_id: str, model: str | N
         await _report(job_uuid, "transcrevendo", 0.45)
         transcriber = get_transcriber(model)
 
-        def on_progress(fraction: float, stage: str) -> None:
-            ctx["progress"] = (stage, 0.45 + fraction * 0.45)
+        # `ctx["progress"]` era escrito aqui e nunca lido por ninguém — a
+        # barra da transcrição ficava parada em 45% pelo estágio mais longo.
+        # A transcrição roda numa thread (`to_thread`) para não bloquear o
+        # laço de eventos do worker; o callback, chamado NESSA thread, não
+        # pode `await` `_report` diretamente — `run_coroutine_threadsafe`
+        # agenda a gravação de volta no laço principal.
+        loop = asyncio.get_running_loop()
 
-        result = transcriber.transcribe(final_vocals, on_progress=on_progress)
+        def on_progress(fraction: float, stage: str) -> None:
+            asyncio.run_coroutine_threadsafe(
+                _report(job_uuid, stage, 0.45 + fraction * 0.45), loop
+            )
+
+        result = await asyncio.to_thread(
+            transcriber.transcribe, final_vocals, on_progress=on_progress
+        )
 
         # 05 · estruturação em versos e estrofes
         await _report(job_uuid, "montando os versos", 0.92)

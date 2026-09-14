@@ -114,7 +114,7 @@ const VHS = {
 
 const lerp = ([from, to]: readonly [number, number], t: number) => from + (to - from) * t;
 
-function vhsFrame(ms: number, pulse: number, intensity: number): EffectFrame {
+export function vhsFrame(ms: number, pulse: number, intensity: number): EffectFrame {
   const block = Math.floor(ms / JITTER_BLOCK_MS);
   const jitterY = (hash(block) - 0.5) * lerp(VHS.jitter, intensity);
   const jitterX = (hash(block * 1.7) - 0.5) * lerp(VHS.jitterX, intensity);

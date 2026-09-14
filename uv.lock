@@ -14,7 +14,6 @@ members = [
     "verso-audio",
     "verso-core",
     "verso-lyrics",
-    "verso-video",
     "verso-worker",
 ]
 
@@ -1350,7 +1349,6 @@ dependencies = [
     { name = "verso-audio" },
     { name = "verso-core" },
     { name = "verso-lyrics" },
-    { name = "verso-video" },
     { name = "verso-worker" },
 ]
 
@@ -1377,7 +1375,6 @@ requires-dist = [
     { name = "verso-audio", extras = ["separation"], marker = "extra == 'ml'", editable = "packages/audio" },
     { name = "verso-core", editable = "packages/core" },
     { name = "verso-lyrics", editable = "packages/lyrics" },
-    { name = "verso-video", editable = "packages/video" },
     { name = "verso-worker", editable = "apps/worker" },
 ]
 provides-extras = ["ml"]
@@ -1403,7 +1400,6 @@ dependencies = [
     { name = "verso-audio" },
     { name = "verso-core" },
     { name = "verso-lyrics" },
-    { name = "verso-video" },
 ]
 
 [package.metadata]
@@ -1416,7 +1412,6 @@ requires-dist = [
     { name = "verso-audio", editable = "packages/audio" },
     { name = "verso-core", editable = "packages/core" },
     { name = "verso-lyrics", editable = "packages/lyrics" },
-    { name = "verso-video", editable = "packages/video" },
 ]
 
 [[package]]
@@ -1465,6 +1460,7 @@ source = { editable = "packages/core" }
 dependencies = [
     { name = "alembic" },
     { name = "asyncpg" },
+    { name = "pillow" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "sqlalchemy", extra = ["asyncio"] },
@@ -1474,6 +1470,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "asyncpg", specifier = ">=0.30" },
+    { name = "pillow", specifier = ">=11.0" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.36" },
@@ -1495,21 +1492,6 @@ requires-dist = [
 ]
 
 [[package]]
-name = "verso-video"
-version = "0.1.0"
-source = { editable = "packages/video" }
-dependencies = [
-    { name = "pillow" },
-    { name = "verso-lyrics" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pillow", specifier = ">=11.0" },
-    { name = "verso-lyrics", editable = "packages/lyrics" },
-]
-
-[[package]]
 name = "verso-worker"
 version = "0.1.0"
 source = { editable = "apps/worker" }
@@ -1519,7 +1501,6 @@ dependencies = [
     { name = "verso-audio" },
     { name = "verso-core" },
     { name = "verso-lyrics" },
-    { name = "verso-video" },
 ]
 
 [package.optional-dependencies]
@@ -1537,7 +1518,6 @@ requires-dist = [
     { name = "verso-audio", extras = ["separation"], marker = "extra == 'ml'", editable = "packages/audio" },
     { name = "verso-core", editable = "packages/core" },
     { name = "verso-lyrics", editable = "packages/lyrics" },
-    { name = "verso-video", editable = "packages/video" },
 ]
 provides-extras = ["ml"]
 

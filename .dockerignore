@@ -1,0 +1,25 @@
+# Contexto de build dos três Dockerfiles (context: .. em infra/docker-compose.yml).
+#
+# `apps/web/node_modules` é o motivo real deste arquivo existir: os
+# `optionalDependencies` do `@remotion/renderer` são um binário por
+# plataforma. Sem excluir isto, o `COPY apps/web ./apps/web` do
+# Dockerfile.worker (e o `COPY apps/web ./` do Dockerfile.web) sobrescreveria
+# o `node_modules` recém-instalado DENTRO do contêiner Linux pelo instalado
+# localmente na máquina de quem faz o build — o binário errado só falharia no
+# primeiro render, silenciosamente.
+apps/web/node_modules
+apps/web/.next
+apps/web/tsconfig.tsbuildinfo
+
+.git
+.venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+
+storage
+infra/models
+
+# Cache do bundle do Remotion: refeito dentro do contêiner, não copiado de fora.
+storage/remotion-bundle

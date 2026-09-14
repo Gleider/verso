@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { KaraokePlayer } from "@/components/KaraokePlayer";
-import type { TrackDetail } from "@/lib/types";
+import { KaraokePlayerView } from "@/components/KaraokePlayerView";
+import { normalizarSettings } from "@/composition/settings";
+import type { TrackDetail, VideoProject } from "@/lib/types";
 import { SERVER_API_URL } from "@/lib/server-api";
+import { api } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -16,9 +18,21 @@ async function loadTrack(id: string): Promise<TrackDetail | null> {
   }
 }
 
+async function loadVideoProject(id: string): Promise<VideoProject | null> {
+  try {
+    const response = await fetch(`${SERVER_API_URL}/tracks/${id}/video-project`, {
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    return response.json();
+  } catch {
+    return null;
+  }
+}
+
 export default async function PlayPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const track = await loadTrack(id);
+  const [track, project] = await Promise.all([loadTrack(id), loadVideoProject(id)]);
   if (!track) notFound();
 
   const lines = track.active_lyrics?.lines ?? [];
@@ -42,13 +56,18 @@ export default async function PlayPage({ params }: { params: Promise<{ id: strin
   }
 
   const semTiming = lines.filter((line) => line.start_ms === null).length;
+  const settings = normalizarSettings(project?.settings);
+  const backgroundUrl =
+    settings.background.kind === "color" ? null : api.backgroundUrl(track.id, 1);
 
   return (
     <>
-      <KaraokePlayer
+      <KaraokePlayerView
         track={track}
         lines={lines}
         lang={track.active_lyrics?.language ?? "pt"}
+        settings={settings}
+        backgroundUrl={backgroundUrl}
       />
       {semTiming > 0 && (
         <p className="sr-only">

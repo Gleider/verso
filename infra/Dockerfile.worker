@@ -2,9 +2,20 @@ FROM python:3.12-slim
 
 # ffmpeg para o áudio. Rust porque `sphn` (dependência do Demucs) não publica
 # wheel para Linux arm64 — em Mac com Apple Silicon ele precisa ser compilado.
+#
+# As libs a partir de libnss3 são do Chromium do Remotion (render de vídeo) —
+# ver https://www.remotion.dev/docs/miscellaneous/linux-dependencies. Sem
+# elas o render falha ao abrir o navegador, com um erro de biblioteca
+# compartilhada que não aponta para a causa.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg curl build-essential pkg-config cmake libopus-dev \
+        ca-certificates gnupg \
+        libnss3 libdbus-1-3 libatk1.0-0 libgbm-dev libasound2 libxrandr2 \
+        libxkbcommon-dev libxfixes3 libxcomposite1 libxdamage1 libpango-1.0-0 \
+        libcairo2 libcups2 libatk-bridge2.0-0 \
     && curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain stable \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 ENV PATH="/root/.cargo/bin:$PATH"
 
@@ -28,5 +39,18 @@ RUN uv pip install nvidia-cublas-cu12 nvidia-cuda-runtime-cu12
 ENV LD_LIBRARY_PATH="/app/.venv/lib/python3.12/site-packages/nvidia/cublas/lib:/app/.venv/lib/python3.12/site-packages/nvidia/cuda_runtime/lib:/app/.venv/lib/python3.12/site-packages/nvidia/cudnn/lib:/app/.venv/lib/python3.12/site-packages/nvidia/cu13/lib"
 
 ENV PATH="/app/.venv/bin:$PATH"
+
+# A composição do vídeo (Remotion) mora em apps/web — o worker chama
+# apps/web/renderer/render.mjs como subprocesso. `npm ci` DENTRO da imagem,
+# não copiado de outra máquina: os `optionalDependencies` do
+# `@remotion/renderer` são um binário por plataforma
+# (`@remotion/compositor-linux-x64-gnu` etc.), e um `node_modules` de um Mac
+# não teria o binário Linux — o erro só apareceria no primeiro render.
+COPY apps/web/package.json apps/web/package-lock.json ./apps/web/
+RUN cd apps/web && npm ci --no-audit --no-fund
+COPY apps/web ./apps/web
+
+# Baixa o Chromium headless-shell agora, não no primeiro render em produção.
+RUN cd apps/web && node renderer/prewarm.mjs
 
 CMD ["arq", "verso_worker.main.WorkerSettings"]

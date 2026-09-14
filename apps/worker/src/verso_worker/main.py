@@ -11,13 +11,8 @@ from verso_worker.video import render_track_video
 settings = get_settings()
 
 
-async def startup(ctx: dict) -> None:
-    ctx["progress"] = None
-
-
 class WorkerSettings:
     functions = [transcribe_track, render_track_video]
-    on_startup = startup
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
     # Uma faixa por vez: Demucs e Whisper já ocupam a máquina inteira.
     max_jobs = 1

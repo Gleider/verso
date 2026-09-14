@@ -7,7 +7,6 @@ dependencies = [
     "verso-audio",
     "verso-asr",
     "verso-lyrics",
-    "verso-video",
     "arq>=0.26",
 ]
 

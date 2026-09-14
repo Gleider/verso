@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 from verso_audio.probe import probe
 from verso_core.config import get_settings
 from verso_core.db import get_session
+from verso_core.images import ImageError, prepare_background
 from verso_core.models import (
     JobKind,
     JobState,
@@ -34,7 +35,6 @@ from verso_core.schemas import (
 )
 from verso_core.storage import LocalStorage, sha256_of
 from verso_lyrics import LrcError, parse_lrc
-from verso_video.images import ImageError, prepare_background
 
 from verso_api.queue import get_pool
 from verso_api.versions import create_version
@@ -44,7 +44,7 @@ settings = get_settings()
 
 ACCEPTED_SUFFIXES = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".opus"}
 ORIGENS_LETRA = ("asr", "lrc", "musixmatch")
-# A imagem é validada pelo conteúdo, não pela extensão — ver verso_video.images.
+# A imagem é validada pelo conteúdo, não pela extensão — ver verso_core.images.
 # O teto é generoso porque foto de câmera passa fácil de 10 MB; o arquivo é
 # reduzido no momento de gravar.
 MAX_IMAGE_BYTES = 40 * 1024 * 1024

@@ -8,25 +8,35 @@
 `packages/`, devolvem resposta. Se você está escrevendo uma decisão de negócio
 dentro de um router, ela está no lugar errado.
 
-No frontend a regra tem um espelho: **`apps/web/lib/*.ts` é lógica pura e
-testada**; componentes React apenas aplicam o que essas funções devolvem. Se um
-componente está calculando, esse cálculo pertence a `lib/`.
+No frontend a regra tem um espelho, e agora com **dois** lugares de lógica
+pura: **`apps/web/lib/*.ts`** (sincronia, sílabas, saneamento, batida, efeito
+ambiente) e **`apps/web/composition/*.ts`** (tudo que a composição de vídeo
+decide — settings, formato, movimento, textura). Componentes React e
+componentes `.tsx` de `composition/` só aplicam o que essas funções devolvem.
+Se algo está calculando, esse cálculo pertence a um `.ts`.
 
 Essa separação é o que permite testar o coração do produto sem banco, sem
-navegador e sem áudio.
+navegador e sem áudio — e, desde o editor de vídeo, sem Chromium também.
 
 ## Pacotes
 
 | Pacote | Responsabilidade | Não faz |
 |---|---|---|
-| `core` | Modelos SQLAlchemy, schemas Pydantic, config, storage | nada de áudio ou texto |
+| `core` | Modelos SQLAlchemy, schemas Pydantic, config, storage, preparo de imagem (`images.py`) | nada de áudio, texto ou vídeo |
 | `audio` | ffmpeg, metadados, Demucs | não conhece banco |
 | `asr` | `Protocol` Transcriber + faster-whisper | não conhece banco |
 | `lyrics` | versos, sílabas, saneamento, diff de timing, export, import .lrc, client Musixmatch | não conhece banco nem áudio |
-| `video` | render do MP4, preparo de imagem | não conhece banco |
 
 Apenas `core` conhece o banco. Os demais recebem e devolvem dados simples — é
 por isso que os testes deles não precisam de fixture de banco.
+
+**`packages/video` não existe mais.** Ele desenhava o karaokê com Pillow e
+compunha com ffmpeg; o editor de vídeo integrado (ver `domain.md` e
+`docs/specs/2026-09-14 integrated-video-editor/spec.md`) substituiu esse
+caminho inteiro por uma composição Remotion em `apps/web/composition/`. A
+única peça de `packages/video` que sobreviveu — `prepare_background`, que
+valida e normaliza a imagem enviada — mudou para `verso_core.images`, porque
+nunca foi lógica de vídeo: é preparo de upload.
 
 ## Contratos, não implementações
 
@@ -35,23 +45,28 @@ uma API paga, ou pelo alinhamento forçado da fase 2, não deve tocar em nenhum
 caso de uso. O mesmo vale para `StorageBackend` em `core/storage.py`: o disco
 local é uma implementação, não a interface.
 
-## Lógica duplicada entre TS e Python — de propósito
+## Lógica compartilhada entre TS e Python
 
-Dois módulos existem nas duas linguagens, porque o player e o vídeo exportado
-precisam produzir **exatamente** o mesmo karaokê:
+`apps/web/lib/syllables.ts`/`normalize.ts` e
+`packages/lyrics/src/verso_lyrics/syllables.py`/`normalize.py` continuam
+existindo nas duas linguagens — o alinhamento forçado da fase 2 roda em
+Python e vai precisar da mesma silabificação.
 
-| Frontend | Backend |
-|---|---|
-| `apps/web/lib/syllables.ts` | `packages/lyrics/src/verso_lyrics/syllables.py` |
-| `apps/web/lib/normalize.ts` | `packages/lyrics/src/verso_lyrics/normalize.py` |
+**A regra do espelho foi rebaixada.** Antes desta mudança, uma divergência
+entre as duas implementações significava "o vídeo exportado sai diferente do
+player" — motivo pelo qual os testes eram espelhados caso a caso
+(`syllables.test.ts` ↔ `test_syllables.py`), para a divergência aparecer como
+falha, não como diferença visual sutil no vídeo.
 
-**Mudou um, mude o outro.** Os testes são espelhados caso a caso
-(`syllables.test.ts` ↔ `test_syllables.py`) justamente para a divergência
-aparecer como falha, não como diferença visual sutil no vídeo.
-
-Se um dia a fase 2 exigir mais lógica compartilhada, a saída limpa é mover a
-silabificação para o backend e o frontend consumir o resultado pronto — mas isso
-é uma refatoração consciente, não algo para fazer de passagem.
+Isso não é mais verdade: **o TypeScript de `composition/` é canônico para
+tudo que é visual.** O vídeo exportado usa exatamente as mesmas
+`normalizeWords`/`timeSyllables` do player, porque os dois rodam a mesma
+composição. `apps/worker/src/verso_worker/versos.py` (Python) ainda existe e
+ainda chama `verso_lyrics.normalize`/`syllables`, mas só como **preparo de
+dados para o job** — a mesma convenção de deslocamento de
+`composition/versos.ts`, não uma segunda implementação visual. Os testes
+espelhados continuam valendo a pena (protegem a fase 2), mas a motivação
+mudou: já não é "senão o vídeo diverge".
 
 ## Assíncrono desde o primeiro dia
 
@@ -66,41 +81,97 @@ Transcrever leva minutos. Nada disso cabe num request HTTP.
 O render de vídeo usa o mesmo mecanismo, com `kind=render` e o caminho do
 arquivo em `output_key`.
 
+## O editor de vídeo integrado
+
+Ver `docs/specs/2026-09-14 integrated-video-editor/spec.md` para o desenho
+completo. Resumo do que existe:
+
+- `video_project` (uma linha por faixa) guarda `settings` — um JSONB validado
+  pelo schema Pydantic `VideoSettings` (`packages/core/src/verso_core/schemas.py`)
+  e espelhado pelo tipo TypeScript `VideoSettings`
+  (`apps/web/composition/settings.ts`). **Os nomes de campo são camelCase dos
+  dois lados**, de propósito: este JSON atravessa API, banco e o Chromium do
+  render sem nenhuma etapa de renomeação.
+- Ajustar a aparência do vídeo **nunca cria versão de letra** — é a mesma
+  regra do offset/nudge (`domain.md`): sobrescreve in-place.
+- `apps/web/app/track/[id]/video/` é a tela do editor: `<Player>` do
+  `@remotion/player` montando `composition/Karaoke.tsx`, com um painel por
+  aba (Background, Font, Motion, Structure, Style, Templates).
+- `apps/web/app/track/[id]/play/` monta a **mesma composição**, em tela cheia,
+  com o ajuste de offset ao redor dela — não dentro.
+
 ## Como o vídeo é montado
 
-O ffmpeg local não tem filtro de legenda (ver `pitfalls.md` §3), então:
+**`apps/web/composition/` é a definição do vídeo — a única.** O mesmo
+componente React (`Karaoke.tsx`) desenha o preview do editor
+(`@remotion/player`, no navegador) e o MP4 exportado
+(`@remotion/renderer`, num Chromium headless). Isso elimina por construção a
+classe de defeito "ficou diferente no vídeo": não há duas implementações para
+divergirem.
 
-1. `verso_video.frames.LyricsLayer` desenha **só a faixa inferior** da tela com
-   Pillow — desenhar a tela inteira a cada quadro seria três vezes o trabalho
-   pelo mesmo resultado.
-2. Os quadros RGBA vão por cano para o ffmpeg.
-3. O ffmpeg aplica o efeito no fundo e compõe com `overlay`.
+### Seis regras duras da composição
 
-O `stderr` do ffmpeg vai para **arquivo**, não para um cano: um cano cheio
-travaria o processo enquanto ainda estivéssemos escrevendo quadros do outro lado.
+Todo arquivo sob `composition/` e `renderer/` segue isto, porque quebrá-las
+**falha em silêncio** — ver `pitfalls.md`:
 
-## Desempenho no player
+1. **Zero `className`.** O `bundle()` do Remotion não carrega
+   `globals.css`/Tailwind; só `style={{}}` com valores de `composition/tokens.ts`.
+2. **Zero `transition`/`animation` de CSS.** O preview roda na página do Next,
+   sob `prefers-reduced-motion`; o render, não. Todo movimento é função de
+   `useCurrentFrame()`.
+3. **Só imports relativos.** O bundler do Remotion ignora `paths` do
+   `tsconfig.json` — um `@/lib/...` aqui compila no Next e quebra só no
+   primeiro render.
+4. **Zero `Math.random` e zero estado entre quadros.** O Remotion renderiza
+   quadros fora de ordem e em processos paralelos.
+5. **Uma só porta para o áudio.** `composition/audio/useEnvelope.ts` é o
+   único lugar que chama `useAudioData`/`getAudioData` — o cache interno do
+   Remotion é indexado só pelo `src` e ignora as opções.
+6. **Lógica pura em `.ts`, componentes em `.tsx`.** Os `.tsx` de `layers/`
+   só escrevem `style`.
 
-O loop de animação é um só, em `requestAnimationFrame`. Três regras que o
-mantêm barato:
+### O caminho do render
 
-1. **Estado do React só muda quando o verso muda** — não a cada quadro.
-2. **Barra de progresso, destaque de sílaba e efeito da imagem são escritos
-   direto no `style`**, sem passar pelo React.
-3. **Busca binária** para achar o verso e a sílaba atuais, nunca varredura.
+1. O worker (`apps/worker/src/verso_worker/video.py`) monta os versos
+   (`versos.py`, espelhando `composition/versos.ts`), busca o `VideoSettings`
+   de `video_project` (ou usa os padrões, se a faixa nunca abriu o editor) e
+   chama `apps/web/renderer/render.mjs` como **subprocesso Node**.
+2. `render.mjs` empacota a composição (`bundle()`, com cache por impressão
+   digital em `storage/remotion-bundle`), mede a composição
+   (`selectComposition()`) e renderiza (`renderMedia()`), emitindo **NDJSON**
+   no stdout — uma linha por evento de progresso.
+3. O worker lê o NDJSON e grava `stage`/`progress` no banco, com
+   `stderr` drenado **em paralelo** (um cano cheio travaria o Node).
+4. As props do vídeo carregam **URLs**, não caminhos de arquivo — as mesmas
+   que o navegador usa (`INTERNAL_API_URL` dentro do Docker, onde
+   `localhost` seria o próprio worker).
 
-O `timeupdate` do HTML5 não serve: dispara ~4 vezes por segundo e faz a letra
-pular. O tempo é lido do elemento de áudio a cada quadro.
+## Desempenho no player e no editor
+
+O loop de animação do preview é o `useCurrentFrame()` do Remotion; fora dele
+(barra de abas, forma de onda, painel), nada acompanha o relógio do vídeo —
+só o `<Player>` re-renderiza por quadro, por design do Remotion.
+
+Onde ainda existe laço próprio (o ajuste de offset ao redor do player), as
+mesmas três regras de sempre valem:
+
+1. **Estado do React só muda quando precisa** — não a cada quadro.
+2. Escrita direta em `style`, sem passar pelo React, para o que muda por quadro.
+3. **Busca binária** para achar o verso e o segmento atuais, nunca varredura
+   (`composition/versos.ts:indiceDoVersoAtivo`,
+   `composition/preenchimento.ts:posicaoNoVerso`).
 
 ## Onde ficam as coisas
 
 ```
 CLAUDE.md                    entrada para agentes
-.claude/rules/               regras detalhadas (este diretório)
+.claude/rules/                regras detalhadas (este diretório)
 docs/specs/                  plano técnico e decisões
 tests/                       pytest — domínio Python
 apps/web/lib/__tests__/      vitest — lógica pura do frontend
+apps/web/composition/        a definição do vídeo (Remotion) — preview e render
+apps/web/renderer/           script Node que grava o MP4 (render.mjs)
 apps/api/migrations/         alembic
 infra/                       docker compose e Dockerfiles
-storage/                     dados locais — fora do git
+storage/                     dados locais — fora do git (inclui o cache do bundle)
 ```

@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     verso_low_confidence: float = 0.5
     verso_keep_vocal_stem: bool = True
 
+    # O Chromium do render (Remotion) busca áudio e imagem AQUI, não no
+    # endereço do navegador: o worker está na rede interna do compose,
+    # onde a API se chama "api", não "localhost".
+    internal_api_url: str = "http://localhost:8000"
+    # Onde encontrar o Node que roda o renderer do Remotion.
+    verso_node_bin: str = "node"
+
     # Credenciais da API não oficial do Musixmatch. O segredo é uma constante
     # pública do protocolo (o app oficial a embute); o env existe para o caso de
     # o servidor passar a exigir outro par.
@@ -48,6 +55,22 @@ class Settings(BaseSettings):
     @property
     def max_upload_bytes(self) -> int:
         return self.verso_max_upload_mb * 1024 * 1024
+
+    @property
+    def web_dir(self) -> Path:
+        # Este arquivo mora em packages/core/src/verso_core/config.py; a raiz
+        # do monorepo fica quatro níveis acima. A mesma estrutura relativa
+        # existe dentro do contêiner do worker (WORKDIR /app preserva os
+        # caminhos), então isto resolve igual local e em Docker.
+        return Path(__file__).resolve().parents[4] / "apps" / "web"
+
+    @property
+    def renderer_script(self) -> Path:
+        return self.web_dir / "renderer" / "render.mjs"
+
+    @property
+    def remotion_bundle_dir(self) -> Path:
+        return self.verso_storage_dir / "remotion-bundle"
 
 
 @lru_cache

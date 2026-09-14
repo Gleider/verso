@@ -6,6 +6,8 @@
  * passa a quebrar se os dois lados divergirem.
  */
 
+import type { VideoSettings } from "@/composition/settings";
+
 export type TrackState = "uploaded" | "processing" | "ready" | "failed";
 export type JobState = "queued" | "running" | "done" | "failed";
 export type LyricsSource = "asr" | "user_edit" | "imported" | "musixmatch";
@@ -70,8 +72,6 @@ export interface Track {
   album: string | null;
   duration_ms: number | null;
   state: TrackState;
-  background_effect: string;
-  effect_intensity: number;
   lyrics_offset_ms: number;
   created_at: string;
 }
@@ -90,4 +90,18 @@ export interface TrackStats {
   lines: number;
   words: number;
   low_confidence: number;
+}
+
+// O tipo vem de `composition/settings.ts`, não é redefinido aqui: é o mesmo
+// JSON que atravessa a API, o banco e o Chromium do render sem renomeação —
+// duas cópias divergiriam em silêncio.
+export type { VideoSettings };
+
+export interface VideoProject {
+  id: string;
+  track_id: string;
+  template_id: string | null;
+  settings: VideoSettings;
+  settings_version: number;
+  updated_at: string;
 }

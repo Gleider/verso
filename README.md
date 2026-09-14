@@ -134,22 +134,28 @@ a velocidade importa.
 - Editor com forma de onda, clique-para-tocar e marcação das palavras de baixa
   confiança.
 - Letras versionadas: salvar cria uma versão nova e preserva os timings medidos.
-- **Player de karaokê** com imagem de fundo, preenchimento sílaba a sílaba e
-  quatro efeitos visuais (incluindo VHS, com intensidade regulável).
-- Ajuste de tempo por faixa e por verso, com marcação no ritmo.
-- **Exportação em MP4** (720p e 1080p) e em `.lrc` / `.txt`.
+- **Editor de vídeo integrado**, com preview em tempo real: fundo (upload,
+  biblioteca ou cor), fonte, nove modos de movimento do texto, posição da
+  letra, paletas e oito texturas (grão, VHS, papel, sépia, poeira, retícula,
+  vinheta), e templates prontos. Preview e vídeo exportado são a **mesma**
+  composição (Remotion) — nunca divergem.
+- **Player de karaokê** em tela cheia, com a mesma composição do editor e
+  ajuste fino de offset.
+- Ajuste de tempo por faixa, com marcação no ritmo.
+- **Exportação em MP4** (720p e 1080p, 16:9 e 9:16) e em `.lrc` / `.txt`.
 
 ## Estrutura
 
 ```
-apps/api        FastAPI: rotas, DTOs, SSE. Sem regra de negócio.
-apps/worker     ARQ: pipeline de transcrição e render de vídeo.
-apps/web        Next.js 15: biblioteca, editor e player.
-packages/core   Modelos, schemas, configuração, storage.
-packages/audio  ffmpeg, metadados, Demucs.
-packages/asr    Protocol Transcriber + faster-whisper.
-packages/lyrics Versos, sílabas, saneamento, diff de timings, export.
-packages/video  Render do MP4.
+apps/api             FastAPI: rotas, DTOs, SSE. Sem regra de negócio.
+apps/worker          ARQ: pipeline de transcrição e render de vídeo (via Remotion).
+apps/web             Next.js 15: biblioteca, editor de letra, editor de vídeo, player.
+apps/web/composition A definição do vídeo (Remotion) — preview e MP4 exportado.
+apps/web/renderer    Script Node que grava o MP4.
+packages/core        Modelos, schemas, configuração, storage, preparo de imagem.
+packages/audio       ffmpeg, metadados, Demucs.
+packages/asr         Protocol Transcriber + faster-whisper.
+packages/lyrics      Versos, sílabas, saneamento, diff de timings, export.
 ```
 
 A regra de fronteira: **lógica de domínio nunca mora em `apps/`**.

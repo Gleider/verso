@@ -2,7 +2,6 @@
 
 import { useCallback, useState } from "react";
 import Link from "next/link";
-import { BackgroundPicker } from "@/components/BackgroundPicker";
 import { VideoExport } from "@/components/VideoExport";
 import { LyricsEditor } from "@/components/LyricsEditor";
 import { LyricsSourcePicker } from "@/components/LyricsSourcePicker";
@@ -61,19 +60,18 @@ export function TrackWorkspace({ track }: { track: TrackDetail }) {
               onTimeUpdate={setCurrentMs}
               seekToMs={seekToMs}
             />
-            <BackgroundPicker
-              trackId={track.id}
-              initialHasBackground={track.has_background}
-              initialEffect={track.background_effect}
-              initialIntensity={track.effect_intensity}
-            />
-
             <VideoExport trackId={track.id} disabled={!ready} />
 
             <div className="flex flex-wrap gap-2 pt-2">
               <Link
-                href={`/track/${track.id}/play`}
+                href={`/track/${track.id}/video`}
                 className="border border-amber bg-amber px-3 py-1.5 font-mono text-xs text-ground transition-colors hover:bg-amber-bright"
+              >
+                editar vídeo
+              </Link>
+              <Link
+                href={`/track/${track.id}/play`}
+                className="border border-line px-3 py-1.5 font-mono text-xs text-ink-2 transition-colors hover:border-amber hover:text-amber"
               >
                 abrir o player
               </Link>

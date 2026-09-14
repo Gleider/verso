@@ -76,14 +76,6 @@ class Track(Base):
     vocals_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Imagem de fundo do player, enviada pelo usuário.
     background_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    # Efeito aplicado à imagem de fundo no player e no vídeo.
-    background_effect: Mapped[str] = mapped_column(
-        String(30), default="breathe", server_default="breathe"
-    )
-    # Intensidade do efeito, de 0 (quase imperceptível) a 1 (bem marcado).
-    effect_intensity: Mapped[float] = mapped_column(
-        Float, default=0.55, server_default="0.55"
-    )
     # Ajuste fino da letra no player. Positivo adianta, negativo atrasa.
     lyrics_offset_ms: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     mime_type: Mapped[str] = mapped_column(String(100))
@@ -176,3 +168,37 @@ class LyricLine(Base):
     nudge_ms: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     version: Mapped[LyricsVersion] = relationship(back_populates="lines")
+
+
+class VideoProject(Base):
+    """Configuração do editor de vídeo integrado — aparência, não a letra.
+
+    Uma faixa tem no máximo um projeto. `settings` guarda tudo que as abas do
+    editor configuram (fundo, fonte, movimento, estrutura, estilo, saída); o
+    contrato vem do schema Pydantic `VideoSettings` e do tipo TypeScript
+    espelhado em `apps/web/composition/settings.ts` — JSONB é o
+    armazenamento, não a ausência de tipo.
+
+    Ajustar a aparência do vídeo NÃO cria versão: é a mesma regra do
+    offset/nudge de letra (`domain.md`) — versão é sobre o que a letra diz,
+    aparência é ajuste contínuo, sobrescrito in-place.
+    """
+
+    __tablename__ = "video_project"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    track_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("track.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    # Nulo quando o projeto começou do zero, sem template.
+    template_id: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    settings: Mapped[dict] = mapped_column(
+        JSONB, default=dict, server_default=text("'{}'::jsonb")
+    )
+    # Saída para mudança de formato de `settings` sem migration de banco: a
+    # leitura passa por uma função de migração (composition/settings.ts e o
+    # schema Pydantic) que traz projetos antigos ao formato corrente.
+    settings_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

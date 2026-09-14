@@ -7,6 +7,10 @@ sem extensão nenhuma (copiada da web, exportada por outro programa).
 Além de validar, a imagem é normalizada: redimensionada para um teto sensato e
 gravada num formato único. Assim o render não precisa lidar com arquivos de 40
 megapixels, e o disco não enche com fotos cruas de câmera.
+
+Vive em `packages/core` porque não é mais domínio de vídeo — desde a etapa 1 o
+vídeo é desenhado pela composição Remotion, que busca a imagem por URL; isto
+aqui é preparo de upload, usado por `apps/api` independente de vídeo.
 """
 
 from __future__ import annotations

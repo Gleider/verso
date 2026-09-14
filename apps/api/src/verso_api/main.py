@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from verso_core.config import get_settings
 
 from verso_api.queue import close_pool
-from verso_api.routers import jobs, lyrics, tracks
+from verso_api.routers import jobs, lyrics, tracks, video
 
 settings = get_settings()
 
@@ -34,7 +34,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    # O render de vídeo (worker) serve o bundle do Remotion num servidor local
+    # em porta sorteada — a origem do Chromium não é a do Next. Por isso é
+    # regex, e não uma lista fixa: sem isto, `useAudioData` falha no render
+    # com uma mensagem que parece problema de rede, não de CORS.
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -43,6 +47,7 @@ app.add_middleware(
 app.include_router(tracks.router)
 app.include_router(lyrics.router)
 app.include_router(jobs.router)
+app.include_router(video.router)
 
 
 @app.get("/health", tags=["sistema"])

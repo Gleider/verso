@@ -8,7 +8,6 @@ dependencies = [
     "verso-audio",
     "verso-asr",
     "verso-lyrics",
-    "verso-video",
     "verso-api",
     "verso-worker",
 ]
@@ -25,7 +24,6 @@ verso-core = { workspace = true }
 verso-audio = { workspace = true }
 verso-asr = { workspace = true }
 verso-lyrics = { workspace = true }
-verso-video = { workspace = true }
 verso-api = { workspace = true }
 verso-worker = { workspace = true }
 

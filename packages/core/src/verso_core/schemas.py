@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -125,8 +126,6 @@ class TrackOut(BaseModel):
     album: str | None
     duration_ms: int | None
     state: TrackState
-    background_effect: str = "breathe"
-    effect_intensity: float = 0.55
     lyrics_offset_ms: int = 0
     created_at: datetime
 
@@ -159,10 +158,6 @@ class TrackUpdate(BaseModel):
         le=30_000,
         description="positivo adianta a letra, negativo atrasa",
     )
-    background_effect: str | None = Field(
-        default=None, pattern="^(breathe|vhs|pulse|none)$"
-    )
-    effect_intensity: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class RenderRequest(BaseModel):
@@ -171,3 +166,96 @@ class RenderRequest(BaseModel):
 
 class TranscribeRequest(BaseModel):
     model: str | None = Field(default=None, description="sobrescreve o modelo padrão")
+
+
+# ---------------------------------------------------------------------------
+# Editor de vídeo integrado (docs/specs/2026-09-14 integrated-video-editor).
+#
+# Os nomes de campo aqui são camelCase, não o snake_case do resto do arquivo:
+# este JSON atravessa a API, o banco (JSONB) e o Chromium do render sem
+# nenhuma etapa de renomeação — é consumido direto pelo tipo TypeScript
+# `VideoSettings` em `apps/web/composition/settings.ts`. Um desvio de nome
+# aqui não dá erro de tipo em lugar nenhum; o campo simplesmente chega como
+# `undefined` do lado TS e o vídeo sai com o padrão errado, calado.
+# ---------------------------------------------------------------------------
+
+
+class BackgroundSettings(BaseModel):
+    kind: Literal["upload", "library", "cover", "color"] = "color"
+    ref: str | None = None
+    color: str = "#0c1316"
+    ambient: Literal["breathe", "pulse", "drift", "none"] = "breathe"
+    ambientIntensity: float = Field(default=0.55, ge=0.0, le=1.0)
+    blur: float = Field(default=0.0, ge=0.0, le=40.0)
+    darken: float = Field(default=0.35, ge=0.0, le=1.0)
+
+
+class FontSettings(BaseModel):
+    family: Literal["bricolage", "source-serif", "jetbrains"] = "bricolage"
+    size: Literal["small", "medium", "large"] = "medium"
+    weight: int = Field(default=800, ge=100, le=900)
+    alignH: Literal["left", "center", "right", "justify"] = "center"
+    alignV: Literal["top", "middle", "bottom"] = "middle"
+    uppercase: bool = False
+    lineHeight: float = Field(default=1.25, ge=0.8, le=2.5)
+
+
+class MotionSettings(BaseModel):
+    animation: Literal[
+        "fill", "fade", "slide", "wipe", "popup", "scaling", "mask", "bubbling", "static"
+    ] = "fill"
+    tweak: Literal["none", "floating"] = "none"
+    sync: Literal["line", "word", "syllable"] = "syllable"
+    durationMs: int = Field(default=420, ge=0, le=4000)
+
+
+class StructureSettings(BaseModel):
+    lyricsPosition: Literal["top", "center", "bottom"] = "center"
+
+
+class StyleSettings(BaseModel):
+    palette: str = "estudio"
+    texture: Literal[
+        "none", "grain", "vhs", "paper", "sepia", "dust", "halftone", "vignette"
+    ] = "none"
+    textureIntensity: float = Field(default=0.5, ge=0.0, le=1.0)
+    overlay: Literal["none", "scrim-bottom", "scrim-full", "vignette"] = "none"
+
+
+class OutputSettings(BaseModel):
+    aspectRatio: Literal["16:9", "9:16"] = "16:9"
+    resolution: Literal["720p", "1080p"] = "1080p"
+    fps: int = Field(default=30, ge=1, le=60)
+
+
+class VideoSettings(BaseModel):
+    """Espelha `composition/settings.ts` campo a campo."""
+
+    background: BackgroundSettings = Field(default_factory=BackgroundSettings)
+    font: FontSettings = Field(default_factory=FontSettings)
+    motion: MotionSettings = Field(default_factory=MotionSettings)
+    structure: StructureSettings = Field(default_factory=StructureSettings)
+    style: StyleSettings = Field(default_factory=StyleSettings)
+    output: OutputSettings = Field(default_factory=OutputSettings)
+
+
+class VideoProjectOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    track_id: uuid.UUID
+    template_id: str | None
+    settings: VideoSettings
+    settings_version: int
+    updated_at: datetime
+
+
+class VideoProjectUpdate(BaseModel):
+    """`PUT` com o objeto inteiro, não `PATCH` por campo.
+
+    O editor sempre tem o estado completo em mãos, e gravação parcial
+    concorrente não tem quem resolva num app de um usuário só.
+    """
+
+    template_id: str | None = None
+    settings: VideoSettings

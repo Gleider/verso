@@ -22,6 +22,10 @@ out/
 storage/
 !storage/.gitkeep
 
+# Documentação específica do projeto
+docs/specs/2026-09-14 integrated-video-editor/*
+!docs/specs/2026-09-14 integrated-video-editor/spec.md
+
 # Cache de modelos ML (~3 GB)
 infra/models/
 

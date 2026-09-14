@@ -7,6 +7,8 @@ import type {
   TrackDetail,
   TrackStats,
   VersionSummary,
+  VideoProject,
+  VideoSettings,
 } from "./types";
 
 /**
@@ -87,17 +89,6 @@ export const api = {
     request<LyricsVersion>(`/tracks/${trackId}/lyrics/nudges`, {
       method: "PATCH",
       body: JSON.stringify({ nudges }),
-    }),
-
-  /** Efeito aplicado à imagem de fundo. */
-  setEffect: (id: string, background_effect: string, effect_intensity?: number) =>
-    request<Track>(`/tracks/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(
-        effect_intensity === undefined
-          ? { background_effect }
-          : { background_effect, effect_intensity },
-      ),
     }),
 
   /** Ajuste fino da letra: positivo adianta, negativo atrasa. */
@@ -196,6 +187,18 @@ export const api = {
     `${BASE}/tracks/${id}/lyrics/export?format=${format}`,
 
   eventsUrl: (id: string) => `${BASE}/tracks/${id}/events`,
+
+  /** Devolve o projeto do editor de vídeo, criando-o com os padrões se não houver. */
+  getVideoProject: (id: string) => request<VideoProject>(`/tracks/${id}/video-project`),
+
+  /** Grava `settings` inteiro — nunca cria versão de letra, é aparência. */
+  updateVideoProject: (id: string, settings: VideoSettings, templateId: string | null = null) =>
+    request<VideoProject>(`/tracks/${id}/video-project`, {
+      method: "PUT",
+      body: JSON.stringify({ template_id: templateId, settings }),
+    }),
+
+  listVideoTemplates: () => request<unknown[]>("/video/templates"),
 };
 
 export function formatDuration(ms: number | null | undefined): string {
