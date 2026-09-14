@@ -1484,11 +1484,15 @@ name = "verso-lyrics"
 version = "0.1.0"
 source = { editable = "packages/lyrics" }
 dependencies = [
+    { name = "httpx" },
     { name = "verso-asr" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "verso-asr", editable = "packages/asr" }]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "verso-asr", editable = "packages/asr" },
+]
 
 [[package]]
 name = "verso-video"

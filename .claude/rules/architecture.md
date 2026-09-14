@@ -22,7 +22,7 @@ navegador e sem áudio.
 | `core` | Modelos SQLAlchemy, schemas Pydantic, config, storage | nada de áudio ou texto |
 | `audio` | ffmpeg, metadados, Demucs | não conhece banco |
 | `asr` | `Protocol` Transcriber + faster-whisper | não conhece banco |
-| `lyrics` | versos, sílabas, saneamento, diff de timing, export | não conhece banco nem áudio |
+| `lyrics` | versos, sílabas, saneamento, diff de timing, export, import .lrc, client Musixmatch | não conhece banco nem áudio |
 | `video` | render do MP4, preparo de imagem | não conhece banco |
 
 Apenas `core` conhece o banco. Os demais recebem e devolvem dados simples — é

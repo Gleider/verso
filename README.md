@@ -124,6 +124,9 @@ a velocidade importa.
 ## O que já funciona
 
 - Upload com deduplicação por hash: o mesmo arquivo nunca processa duas vezes.
+- Escolha da origem da letra no envio: **transcrição com IA**, **arquivo .lrc**
+  (timing por verso, importado na hora) ou **letra+sync do Musixmatch**
+  (título/artista confirmados na tela; a busca sai da API, nunca do browser).
 - Pipeline assíncrono de seis estágios, com progresso ao vivo.
 - Separação do stem vocal com Demucs **antes** da transcrição.
 - Transcrição com faster-whisper, timestamp por palavra.

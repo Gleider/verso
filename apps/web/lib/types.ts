@@ -8,7 +8,7 @@
 
 export type TrackState = "uploaded" | "processing" | "ready" | "failed";
 export type JobState = "queued" | "running" | "done" | "failed";
-export type LyricsSource = "asr" | "user_edit" | "imported";
+export type LyricsSource = "asr" | "user_edit" | "imported" | "musixmatch";
 
 export interface WordTiming {
   w: string;

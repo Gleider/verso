@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     verso_low_confidence: float = 0.5
     verso_keep_vocal_stem: bool = True
 
+    # Credenciais da API não oficial do Musixmatch. O segredo é uma constante
+    # pública do protocolo (o app oficial a embute); o env existe para o caso de
+    # o servidor passar a exigir outro par.
+    verso_musixmatch_app_id: str = "android-player-v1.0"
+    verso_musixmatch_secret: str = "mNdca@6W7TeEcFn6*3.s97sJ*yPMd"
+
     @property
     def originals_dir(self) -> Path:
         return self.verso_storage_dir / "originals"
@@ -33,6 +39,11 @@ class Settings(BaseSettings):
     @property
     def vocals_dir(self) -> Path:
         return self.verso_storage_dir / "vocals"
+
+    @property
+    def musixmatch_session_file(self) -> Path:
+        # Junto com o storage: o volume do Docker mantém o token entre rebuilds.
+        return self.verso_storage_dir / "musixmatch_session.json"
 
     @property
     def max_upload_bytes(self) -> int:

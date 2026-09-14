@@ -93,6 +93,13 @@ class LyricsImport(BaseModel):
     language: str | None = None
 
 
+class MusixmatchFetch(BaseModel):
+    """Busca a letra sincronizada no Musixmatch a partir de título e artista."""
+
+    title: str
+    artist: str
+
+
 class JobOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

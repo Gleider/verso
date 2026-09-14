@@ -128,7 +128,14 @@ export function LyricsEditor({ trackId, version, currentMs, onSeek, onSaved }: P
         <div className="flex items-baseline gap-3">
           <h2 className="font-display text-lg font-semibold tracking-tight">Letra</h2>
           <span className="font-mono text-[11px] uppercase tracking-wider text-ink-3">
-            v{version.version_no} · {version.source === "asr" ? "gerada" : version.source === "imported" ? "importada" : "editada"}
+            v{version.version_no} ·{" "}
+            {version.source === "asr"
+              ? "gerada"
+              : version.source === "imported"
+                ? "importada"
+                : version.source === "musixmatch"
+                  ? "musixmatch"
+                  : "editada"}
             {version.language ? ` · ${version.language}` : ""}
           </span>
         </div>
@@ -235,8 +242,12 @@ export function LyricsEditor({ trackId, version, currentMs, onSeek, onSaved }: P
                     className="min-w-0 flex-1 text-left font-body text-[15px] text-ink hover:text-amber-bright"
                   >
                     {/* Enquanto o verso não foi tocado, mostramos as palavras marcadas
-                        pela confiança do modelo. Depois de editado, o texto é do usuário. */}
-                    {edited ? lines[index] : <Words words={line.words} reviewed={isReviewed(index)} />}
+                        pela confiança do modelo. Verso importado (.lrc/Musixmatch) não
+                        tem palavras — aí o texto da linha é o que existe. Depois de
+                        editado, o texto é do usuário. */}
+                    {edited || line.words.length === 0 ? lines[index] : (
+                      <Words words={line.words} reviewed={isReviewed(index)} />
+                    )}
                   </button>
                 )}
 

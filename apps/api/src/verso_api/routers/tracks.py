@@ -6,7 +6,7 @@ import os
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,7 @@ from verso_core.db import get_session
 from verso_core.models import (
     JobKind,
     JobState,
+    LyricsSource,
     LyricsVersion,
     ProcessingJob,
     Track,
@@ -32,14 +33,17 @@ from verso_core.schemas import (
     TranscribeRequest,
 )
 from verso_core.storage import LocalStorage, sha256_of
+from verso_lyrics import LrcError, parse_lrc
 from verso_video.images import ImageError, prepare_background
 
 from verso_api.queue import get_pool
+from verso_api.versions import create_version
 
 router = APIRouter(prefix="/tracks", tags=["faixas"])
 settings = get_settings()
 
 ACCEPTED_SUFFIXES = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".opus"}
+ORIGENS_LETRA = ("asr", "lrc", "musixmatch")
 # A imagem é validada pelo conteúdo, não pela extensão — ver verso_video.images.
 # O teto é generoso porque foto de câmera passa fácil de 10 MB; o arquivo é
 # reduzido no momento de gravar.
@@ -60,9 +64,16 @@ async def _enqueue(
 @router.post("", response_model=TrackCreated, status_code=status.HTTP_202_ACCEPTED)
 async def upload_track(
     file: UploadFile = File(...),
+    source: str = Form("asr"),
+    lrc_file: UploadFile | None = File(None),
     session: AsyncSession = Depends(get_session),
 ) -> TrackCreated:
-    """Recebe o arquivo e devolve na hora — transcrever leva minutos."""
+    """Recebe o arquivo e devolve na hora — transcrever leva minutos.
+
+    `source` escolhe a origem da letra: `asr` (transcrição, padrão), `lrc`
+    (arquivo .lrc enviado junto em `lrc_file` — a faixa já volta pronta) ou
+    `musixmatch` (só salva; a busca acontece em `POST .../lyrics/musixmatch`).
+    """
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in ACCEPTED_SUFFIXES:
         raise HTTPException(
@@ -70,6 +81,14 @@ async def upload_track(
             detail=(
                 f"Formato {suffix or 'desconhecido'} não é aceito. "
                 f"Use um destes: {', '.join(sorted(ACCEPTED_SUFFIXES))}."
+            ),
+        )
+    if source not in ORIGENS_LETRA:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Origem da letra desconhecida: {source!r}. "
+                "Use uma destas: asr, lrc, musixmatch."
             ),
         )
 
@@ -109,7 +128,27 @@ async def upload_track(
     session.add(track)
     await session.flush()
 
-    job_id = await _enqueue(track_id, session)
+    if source == "asr":
+        job_id = await _enqueue(track_id, session)
+    elif source == "lrc":
+        if lrc_file is None:
+            raise HTTPException(
+                status_code=415, detail="Escolha a origem .lrc sem enviar o arquivo .lrc."
+            )
+        if Path(lrc_file.filename or "").suffix.lower() != ".lrc":
+            raise HTTPException(
+                status_code=415, detail="O arquivo de letra precisa ter extensão .lrc."
+            )
+        try:
+            lines = parse_lrc((await lrc_file.read()).decode("utf-8", errors="replace"))
+        except LrcError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        await create_version(session, track_id, lines, LyricsSource.imported, None, None)
+        track.state = TrackState.ready
+        job_id = None
+    else:  # musixmatch: a busca vem numa chamada separada, depois da confirmação
+        job_id = None
+
     await session.commit()
     return TrackCreated(track_id=track_id, job_id=job_id, duplicate=False)
 

@@ -59,6 +59,7 @@ class LyricsSource(enum.StrEnum):
     asr = "asr"
     user_edit = "user_edit"
     imported = "imported"
+    musixmatch = "musixmatch"
 
 
 class Track(Base):

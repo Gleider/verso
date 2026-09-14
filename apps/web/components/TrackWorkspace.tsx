@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BackgroundPicker } from "@/components/BackgroundPicker";
 import { VideoExport } from "@/components/VideoExport";
 import { LyricsEditor } from "@/components/LyricsEditor";
+import { LyricsSourcePicker } from "@/components/LyricsSourcePicker";
 import { ProcessingStatus } from "@/components/ProcessingStatus";
 import { Waveform } from "@/components/Waveform";
 import { api, formatDuration } from "@/lib/api";
@@ -37,7 +38,18 @@ export function TrackWorkspace({ track }: { track: TrackDetail }) {
       </header>
 
       {!ready ? (
-        <ProcessingStatus trackId={track.id} initialJob={track.latest_job} />
+        track.state === "uploaded" && version === null ? (
+          // Faixa salva sem origem de letra (ex.: upload interrompido ou
+          // Musixmatch que ainda não foi buscado) — deixa escolher de novo.
+          <LyricsSourcePicker
+            trackId={track.id}
+            initialTitle={track.title}
+            initialArtist={track.artist}
+            onDone={() => window.location.reload()}
+          />
+        ) : (
+          <ProcessingStatus trackId={track.id} initialJob={track.latest_job} />
+        )
       ) : (
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
           <section className="flex flex-col gap-4 lg:sticky lg:top-6 lg:self-start">

@@ -1,4 +1,4 @@
-/** Chamadas ao backend. Toda rota passa pelo rewrite /api do Next. */
+/** Chamadas ao backend. O browser fala direto com a API — ver nota abaixo. */
 
 import type {
   Job,
@@ -121,9 +121,14 @@ export const api = {
     }),
 
   /** Upload não usa `request`: multipart não leva Content-Type manual. */
-  async upload(file: File): Promise<{ track_id: string; job_id: string | null; duplicate: boolean }> {
+  async upload(
+    file: File,
+    opts?: { source?: string; lrcFile?: File },
+  ): Promise<{ track_id: string; job_id: string | null; duplicate: boolean }> {
     const form = new FormData();
     form.append("file", file);
+    form.append("source", opts?.source ?? "asr");
+    if (opts?.lrcFile) form.append("lrc_file", opts.lrcFile);
     const response = await fetch(`${BASE}/tracks`, { method: "POST", body: form });
     if (!response.ok) {
       const detail = await response
@@ -134,6 +139,31 @@ export const api = {
     }
     return response.json();
   },
+
+  /** Envia um .lrc para uma faixa que já existe (página da faixa). */
+  async importLrc(id: string, file: File): Promise<LyricsVersion> {
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch(`${BASE}/tracks/${id}/lyrics/import-lrc`, {
+      method: "POST",
+      body: form,
+    });
+    if (!response.ok) {
+      const detail = await response
+        .json()
+        .then((body) => body?.detail)
+        .catch(() => null);
+      throw new Error(detail ?? "Não foi possível importar o .lrc.");
+    }
+    return response.json();
+  },
+
+  /** Busca letra+sync no Musixmatch (a chamada sai da API, nunca do browser). */
+  fetchMusixmatch: (id: string, title: string, artist: string) =>
+    request<LyricsVersion>(`/tracks/${id}/lyrics/musixmatch`, {
+      method: "POST",
+      body: JSON.stringify({ title, artist }),
+    }),
 
   /** PUT multipart: define a imagem de fundo do player. */
   async setBackground(id: string, file: File): Promise<TrackDetail> {

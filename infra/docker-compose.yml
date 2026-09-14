@@ -36,6 +36,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-verso}:${POSTGRES_PASSWORD:-verso}@postgres:5432/${POSTGRES_DB:-verso}
       REDIS_URL: redis://redis:6379/0
       VERSO_STORAGE_DIR: /data
+      VERSO_MUSIXMATCH_APP_ID: ${VERSO_MUSIXMATCH_APP_ID:-android-player-v1.0}
+      VERSO_MUSIXMATCH_SECRET: ${VERSO_MUSIXMATCH_SECRET:-mNdca@6W7TeEcFn6*3.s97sJ*yPMd}
     ports:
       - "${API_HOST_PORT:-8000}:8000"
     volumes:

@@ -81,12 +81,13 @@ Cada uma está explicada, com o sintoma que produz, em
 ## Fluxo de dados
 
 ```
-upload → sha256 (dedup) → job ARQ
-  → ffmpeg (WAV 16 kHz mono)
-  → Demucs (isola o stem vocal)
-  → faster-whisper (VAD + timestamp por palavra)
-  → agrupamento em versos/estrofes
-  → lyrics_version v1 (source=asr)
+upload → sha256 (dedup) → escolha da origem da letra
+  → IA: job ARQ → ffmpeg (WAV 16 kHz mono) → Demucs (isola o stem vocal)
+        → faster-whisper (VAD + timestamp por palavra)
+        → agrupamento em versos/estrofes → lyrics_version v1 (source=asr)
+  → .lrc: parse_lrc (timing por verso) → lyrics_version v1 (source=imported)
+  → Musixmatch: confirma título/artista → API busca subtitle.get
+        → parse_lrc → lyrics_version v1 (source=musixmatch)
 
 editor → PUT /lyrics → diff por token → lyrics_version v2 (source=user_edit)
 player → ajustes de tempo → PATCH in-place (NÃO cria versão)

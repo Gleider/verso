@@ -115,7 +115,7 @@ destaque sumir por um instante.
 track:  uploaded → processing → ready | failed
 job:    queued → running → done | failed
 job.kind: transcribe | align (fase 2) | render
-lyrics_version.source: asr | user_edit | imported
+lyrics_version.source: asr | user_edit | imported | musixmatch
 ```
 
 Só **uma** `lyrics_version` por faixa tem `is_active = true`.

@@ -7,25 +7,37 @@ derivada da anterior, e a antiga continua acessível.
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+import httpx
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from verso_asr.base import Word
 from verso_core.config import get_settings
 from verso_core.db import get_session
-from verso_core.models import LyricLine, LyricsSource, LyricsVersion, Track
+from verso_core.models import LyricsSource, LyricsVersion, Track, TrackState
 from verso_core.schemas import (
     LyricsImport,
     LyricsUpdate,
     LyricsVersionOut,
     LyricsVersionSummary,
+    MusixmatchFetch,
     NudgeUpdate,
+)
+from verso_lyrics import (
+    LrcError,
+    MusixmatchClient,
+    MusixmatchError,
+    MusixmatchNotFound,
+    parse_lrc,
 )
 from verso_lyrics.export import to_lrc, to_plain_text
 from verso_lyrics.grouping import Line
 from verso_lyrics.timing import reconcile_timings
+
+from verso_api.versions import create_version
 
 router = APIRouter(prefix="/tracks/{track_id}/lyrics", tags=["letras"])
 settings = get_settings()
@@ -65,57 +77,6 @@ def _to_domain(version: LyricsVersion) -> list[Line]:
     ]
 
 
-async def _create_version(
-    session: AsyncSession,
-    track_id: uuid.UUID,
-    lines: list[Line],
-    source: LyricsSource,
-    parent: LyricsVersion | None,
-    language: str | None,
-) -> LyricsVersion:
-    await session.execute(
-        update(LyricsVersion).where(LyricsVersion.track_id == track_id).values(is_active=False)
-    )
-    last = await session.scalar(
-        select(LyricsVersion.version_no)
-        .where(LyricsVersion.track_id == track_id)
-        .order_by(LyricsVersion.version_no.desc())
-        .limit(1)
-    )
-    version = LyricsVersion(
-        track_id=track_id,
-        version_no=(last or 0) + 1,
-        source=source,
-        language=language,
-        is_active=True,
-        parent_id=parent.id if parent else None,
-    )
-    session.add(version)
-    await session.flush()
-
-    for line in lines:
-        session.add(
-            LyricLine(
-                version_id=version.id,
-                idx=line.idx,
-                text=line.text,
-                start_ms=line.start_ms,
-                end_ms=line.end_ms,
-                words=[
-                    {"w": w.text, "s": w.start_ms, "e": w.end_ms, "p": w.probability}
-                    for w in line.words
-                ],
-                needs_realign=line.needs_realign,
-                starts_stanza=line.starts_stanza,
-                reviewed=line.reviewed,
-                nudge_ms=line.nudge_ms,
-            )
-        )
-    await session.flush()
-    await session.refresh(version, ["lines"])
-    return version
-
-
 @router.get("", response_model=LyricsVersionOut)
 async def get_lyrics(
     track_id: uuid.UUID, session: AsyncSession = Depends(get_session)
@@ -147,9 +108,75 @@ async def save_lyrics(
         reviewed_flags=[line.reviewed for line in ordered],
     )
 
-    version = await _create_version(
+    version = await create_version(
         session, track_id, reconciled, LyricsSource.user_edit, current, current.language
     )
+    await session.commit()
+    return version
+
+
+@router.post("/import-lrc", response_model=LyricsVersionOut)
+async def import_lrc(
+    track_id: uuid.UUID,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+) -> LyricsVersion:
+    """Substitui a letra por um arquivo .lrc enviado (envio tardio, pela página da faixa)."""
+    track = await session.get(Track, track_id)
+    if track is None:
+        raise HTTPException(status_code=404, detail="Faixa não encontrada.")
+    if Path(file.filename or "").suffix.lower() != ".lrc":
+        raise HTTPException(status_code=415, detail="O arquivo precisa ter extensão .lrc.")
+
+    try:
+        lines = parse_lrc((await file.read()).decode("utf-8", errors="replace"))
+    except LrcError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    current = await _active_version(session, track_id)
+    version = await create_version(session, track_id, lines, LyricsSource.imported, current, None)
+    track.state = TrackState.ready
+    await session.commit()
+    return version
+
+
+@router.post("/musixmatch", response_model=LyricsVersionOut)
+async def fetch_musixmatch(
+    track_id: uuid.UUID,
+    payload: MusixmatchFetch,
+    session: AsyncSession = Depends(get_session),
+) -> LyricsVersion:
+    """Busca a letra sincronizada no Musixmatch e vira a versão ativa.
+
+    Falhas comuns voltam para o diálogo: 404 quando a música não está no
+    catálogo (confira título/artista) e 502 quando o Musixmatch não responde.
+    """
+    track = await session.get(Track, track_id)
+    if track is None:
+        raise HTTPException(status_code=404, detail="Faixa não encontrada.")
+
+    try:
+        async with httpx.AsyncClient(timeout=20) as http:
+            client = MusixmatchClient(
+                settings.verso_musixmatch_app_id,
+                settings.verso_musixmatch_secret,
+                settings.musixmatch_session_file,
+                http,
+            )
+            lines = await client.fetch_subtitle(payload.title, payload.artist)
+    except MusixmatchNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except LrcError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except MusixmatchError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    current = await _active_version(session, track_id)
+    language = current.language if current else None
+    version = await create_version(
+        session, track_id, lines, LyricsSource.musixmatch, current, language
+    )
+    track.state = TrackState.ready
     await session.commit()
     return version
 
@@ -175,7 +202,7 @@ async def import_lyrics(
         for line in reconciled:
             line.needs_realign = True
 
-    version = await _create_version(
+    version = await create_version(
         session,
         track_id,
         reconciled,
