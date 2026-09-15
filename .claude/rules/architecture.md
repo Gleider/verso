@@ -277,6 +277,20 @@ o valor escolhido no painel continua sendo o teto do que se vê.
    que o navegador usa (`INTERNAL_API_URL` dentro do Docker, onde
    `localhost` seria o próprio worker).
 
+**O worker não leva o app do Next junto.** Ele precisa do bundler e do
+Chromium, não de `next`, `@rspack`, `sharp` ou `typescript` — por isso
+`apps/web/renderer/package.json` é um manifesto separado, declarando só o que o
+render abre (194 MB instalados, contra 1,1 GB do manifesto do app). O
+`Dockerfile.worker` instala esse, e copia do repositório apenas `composition/`,
+`lib/`, `public/` e `renderer/`.
+
+O preço são dois lugares declarando as versões do Remotion, e divergir ali seria
+grave: o preview rodando numa versão e o MP4 saindo de outra recria por outro
+caminho justamente a classe de defeito que a composição única elimina. Quem
+segura isso é `renderer/__tests__/manifesto.test.ts` — ele falha se uma versão
+divergir **e** se algum arquivo da composição passar a importar um pacote que o
+manifesto do renderer não declara.
+
 ## Desempenho no player e no editor
 
 O loop de animação do preview é o `useCurrentFrame()` do Remotion; fora dele

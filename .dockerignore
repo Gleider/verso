@@ -2,11 +2,15 @@
 #
 # `apps/web/node_modules` é o motivo real deste arquivo existir: os
 # `optionalDependencies` do `@remotion/renderer` são um binário por
-# plataforma. Sem excluir isto, o `COPY apps/web ./apps/web` do
-# Dockerfile.worker (e o `COPY apps/web ./` do Dockerfile.web) sobrescreveria
-# o `node_modules` recém-instalado DENTRO do contêiner Linux pelo instalado
-# localmente na máquina de quem faz o build — o binário errado só falharia no
-# primeiro render, silenciosamente.
+# plataforma. Sem excluir isto, o `COPY apps/web ./` do Dockerfile.web
+# sobrescreveria o `node_modules` recém-instalado DENTRO do contêiner Linux
+# pelo instalado localmente na máquina de quem faz o build — o binário errado
+# só falharia no primeiro render, silenciosamente.
+#
+# O Dockerfile.worker já não depende disto: ele copia do contexto apenas
+# `composition/`, `lib/`, `public/` e `renderer/`, e recebe o `node_modules`
+# do próprio estágio de construção. A exclusão continua valendo mesmo assim —
+# é ela que evita transferir 1,1 GB de contexto numa build fria.
 apps/web/node_modules
 apps/web/.next
 apps/web/tsconfig.tsbuildinfo

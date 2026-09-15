@@ -1,18 +1,22 @@
-FROM python:3.12-slim
-
-# ffmpeg para o áudio. Rust porque `sphn` (dependência do Demucs) não publica
-# wheel para Linux arm64 — em Mac com Apple Silicon ele precisa ser compilado.
+# Duas etapas de propósito: o que COMPILA não precisa viajar para a produção.
 #
-# As libs a partir de libnss3 são do Chromium do Remotion (render de vídeo) —
-# ver https://www.remotion.dev/docs/miscellaneous/linux-dependencies. Sem
-# elas o render falha ao abrir o navegador, com um erro de biblioteca
-# compartilhada que não aponta para a causa.
+# Numa imagem de estágio único, tudo que o build usa fica dentro da imagem
+# final — e aqui isso somava ~1,2 GB de coisa que nunca roda: o toolchain do
+# Rust (598 MB), gcc/g++/cmake/binutils (312 MB), o `uv` (55 MB) e o cache do
+# npm (255 MB). Apagar no fim não resolveria: camada não encolhe, e um
+# `rm -rf` numa camada posterior só esconde os arquivos.
+
+# ---- construção -------------------------------------------------------------
+FROM python:3.12-slim AS construcao
+
+# Rust, cmake e libopus existem aqui por UM motivo só: `sphn` (dependência do
+# Demucs) não publica wheel para Linux **arm64**, e num Mac com Apple Silicon
+# ele precisa ser compilado da fonte. Em amd64 há wheel manylinux e nada disto
+# é usado — mas continua instalado porque a imagem tem de construir nos dois.
+# O que mudou é que agora isto não sobrevive a esta etapa.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ffmpeg curl build-essential pkg-config cmake libopus-dev \
-        ca-certificates gnupg \
-        libnss3 libdbus-1-3 libatk1.0-0 libgbm-dev libasound2 libxrandr2 \
-        libxkbcommon-dev libxfixes3 libxcomposite1 libxdamage1 libpango-1.0-0 \
-        libcairo2 libcups2 libatk-bridge2.0-0 \
+        curl ca-certificates gnupg \
+        build-essential pkg-config cmake libopus-dev \
     && curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain stable \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
@@ -29,28 +33,85 @@ COPY packages ./packages
 COPY apps/api ./apps/api
 COPY apps/worker ./apps/worker
 
-# Aqui os extras de ML entram: torch, demucs e faster-whisper (~2 GB).
-RUN uv sync --frozen --no-dev --package verso-worker --extra ml
-
+# Aqui os extras de ML entram: torch, demucs e faster-whisper.
+#
 # O ctranslate2 (motor do faster-whisper) é build CUDA 12 e carrega o
 # libcublas/libcudart dinamicamente, enquanto o torch traz as libs cu13.
 # Instalamos as libs cu12 e expomos tudo no LD_LIBRARY_PATH para a GPU funcionar.
-RUN uv pip install nvidia-cublas-cu12 nvidia-cuda-runtime-cu12
-ENV LD_LIBRARY_PATH="/app/.venv/lib/python3.12/site-packages/nvidia/cublas/lib:/app/.venv/lib/python3.12/site-packages/nvidia/cuda_runtime/lib:/app/.venv/lib/python3.12/site-packages/nvidia/cudnn/lib:/app/.venv/lib/python3.12/site-packages/nvidia/cu13/lib"
+#
+# O `triton` sai: são 894 MB que só servem ao `torch.compile`, e nem o Demucs
+# nem o faster-whisper compilam grafo. O torch só o importa preguiçosamente,
+# dentro do `_inductor` — `import torch` e `import demucs` seguem funcionando
+# sem ele. Se um dia algum caminho passar a compilar, o sintoma é um
+# `ModuleNotFoundError: triton` explícito, não um erro silencioso.
+RUN uv sync --frozen --no-dev --package verso-worker --extra ml \
+    && uv pip install nvidia-cublas-cu12 nvidia-cuda-runtime-cu12 \
+    && rm -rf /app/.venv/lib/python3.12/site-packages/triton \
+              /app/.venv/lib/python3.12/site-packages/triton-*.dist-info
 
-ENV PATH="/app/.venv/bin:$PATH"
-
-# A composição do vídeo (Remotion) mora em apps/web — o worker chama
-# apps/web/renderer/render.mjs como subprocesso. `npm ci` DENTRO da imagem,
-# não copiado de outra máquina: os `optionalDependencies` do
-# `@remotion/renderer` são um binário por plataforma
+# A composição do vídeo (Remotion) mora em apps/web, e o worker chama
+# apps/web/renderer/render.mjs como subprocesso — mas ele NÃO precisa do app do
+# Next. Instalar `apps/web/package.json` aqui traria `next`, `@rspack`, `sharp`
+# e `typescript`: 1,1 GB para rodar um bundler e um Chromium. O manifesto de
+# `renderer/` declara só o que o render abre — medido em 194 MB.
+#
+# Ele é copiado para `apps/web/` (e não para `apps/web/renderer/`) de
+# propósito: é de lá que o Node resolve o `node_modules`, e é lá que
+# `render.mjs` procura o `package-lock.json` da impressão digital do bundle.
+#
+# `npm ci` DENTRO da imagem, nunca copiado de fora: os `optionalDependencies`
+# do `@remotion/renderer` são um binário por plataforma
 # (`@remotion/compositor-linux-x64-gnu` etc.), e um `node_modules` de um Mac
 # não teria o binário Linux — o erro só apareceria no primeiro render.
-COPY apps/web/package.json apps/web/package-lock.json ./apps/web/
+COPY apps/web/renderer/package.json apps/web/renderer/package-lock.json ./apps/web/
 RUN cd apps/web && npm ci --no-audit --no-fund
-COPY apps/web ./apps/web
 
 # Baixa o Chromium headless-shell agora, não no primeiro render em produção.
+# Ele fica em apps/web/node_modules/.remotion e viaja junto na cópia abaixo.
+COPY apps/web/renderer ./apps/web/renderer
 RUN cd apps/web && node renderer/prewarm.mjs
+
+# ---- execução ---------------------------------------------------------------
+FROM python:3.12-slim
+
+# ffmpeg para o áudio. As libs a partir de libnss3 são do Chromium do Remotion
+# — ver https://www.remotion.dev/docs/miscellaneous/linux-dependencies. Sem
+# elas o render falha ao abrir o navegador, com um erro de biblioteca
+# compartilhada que não aponta para a causa.
+#
+# libgbm1 e libxkbcommon0, não os `-dev` correspondentes: o Chromium carrega as
+# bibliotecas, não compila contra elas, e os pacotes de desenvolvimento
+# arrastam cabeçalhos e dependências de build que nada aqui usa.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg curl ca-certificates gnupg \
+        libnss3 libdbus-1-3 libatk1.0-0 libgbm1 libasound2 libxrandr2 \
+        libxkbcommon0 libxfixes3 libxcomposite1 libxdamage1 libpango-1.0-0 \
+        libcairo2 libcups2 libatk-bridge2.0-0 \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# O uv instala os membros do workspace em modo editável: o .venv guarda .pth
+# apontando para /app/packages/*/src e /app/apps/worker/src. Esses caminhos
+# precisam existir aqui, ou o `import verso_core` falha com o venv na mão.
+# `apps/api` não entra: nenhum .pth aponta para ele.
+COPY --from=construcao /app/.venv ./.venv
+COPY packages ./packages
+COPY apps/worker ./apps/worker
+
+# Do app web, só o que o render usa: a composição, a lógica pura que ela
+# importa, as fontes e imagens de public/ e o próprio renderer. `app/` e
+# `components/` são a interface do Next e não entram no bundle.
+COPY --from=construcao /app/apps/web/node_modules ./apps/web/node_modules
+COPY --from=construcao /app/apps/web/package.json /app/apps/web/package-lock.json ./apps/web/
+COPY apps/web/composition ./apps/web/composition
+COPY apps/web/lib ./apps/web/lib
+COPY apps/web/public ./apps/web/public
+COPY apps/web/renderer ./apps/web/renderer
+
+ENV LD_LIBRARY_PATH="/app/.venv/lib/python3.12/site-packages/nvidia/cublas/lib:/app/.venv/lib/python3.12/site-packages/nvidia/cuda_runtime/lib:/app/.venv/lib/python3.12/site-packages/nvidia/cudnn/lib:/app/.venv/lib/python3.12/site-packages/nvidia/cu13/lib"
+ENV PATH="/app/.venv/bin:$PATH"
 
 CMD ["arq", "verso_worker.main.WorkerSettings"]

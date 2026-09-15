@@ -331,15 +331,21 @@ controle salvo **dentro** dele some junto.
 "deveria" estar ali.
 
 **Causa:** `@remotion/renderer` tem um binário **por plataforma** em
-`optionalDependencies`. O `Dockerfile.worker` roda `npm ci` (que instala o
-binário Linux correto) e, na linha seguinte, `COPY apps/web ./apps/web` — sem
-um `.dockerignore` excluindo `apps/web/node_modules`, essa cópia **sobrescreve**
-o que acabou de ser instalado com o `node_modules` local de quem fez o build
-(macOS ou Windows), que tem o binário errado.
+`optionalDependencies`. O Dockerfile roda `npm ci` (que instala o binário Linux
+correto) e, depois, copia `apps/web` do contexto — sem um `.dockerignore`
+excluindo `apps/web/node_modules`, essa cópia **sobrescreve** o que acabou de
+ser instalado com o `node_modules` local de quem fez o build (macOS ou
+Windows), que tem o binário errado.
 
 **Correção:** `.dockerignore`, na raiz do repositório, exclui
 `apps/web/node_modules` e `apps/web/.next`. Vale para os três Dockerfiles
 (`context: ..` em `infra/docker-compose.yml`).
+
+**O worker ganhou uma defesa a mais:** ele passou a copiar só
+`composition/`, `lib/`, `public/` e `renderer/` do contexto, e recebe o
+`node_modules` do próprio estágio de construção (`COPY --from=construcao`), que
+nunca vem da máquina de quem builda. A armadilha continua valendo de cheio para
+`Dockerfile.web`, que ainda copia `apps/web` inteiro.
 
 ## 22. `<Composition>`/`<Player>` inferem `Props` como `Record<string, unknown>`
 
@@ -619,3 +625,25 @@ uma caixa de tamanho nenhum.
 o JSON na unha). Ao suspeitar disto, compare o **tamanho do MP4**: dois
 renders de configurações diferentes com byte count idêntico querem dizer que
 a diferença não chegou.
+
+## 34. O cache do bundle não via `apps/web/lib`, e o conserto não ia no MP4
+
+**Sintoma:** você corrige a silabificação ou o saneamento de timings, renderiza
+de novo e o vídeo sai **idêntico**. Exit 0, NDJSON de sucesso, MP4 com data
+nova. Nada no sintoma aponta para cache — a suspeita vai para a correção
+("será que não peguei o caso?"), não para o empacotador.
+
+**Causa:** `render.mjs` decide se reaproveita o bundle comparando um SHA-256 do
+que entra nele, e a impressão digital visitava só `composition/` e `public/`.
+Mas a composição **importa de `lib/`**: `versos.ts` chama `timeSyllables` e
+`normalizeWords`, `audio/bandas.ts` e `audio/envelope.ts` chamam `stepBeat`.
+Esses arquivos estavam no bundle e fora do hash.
+
+**Correção:** a impressão digital visita `lib/` também (`__tests__` de fora, que
+não entra no bundle). Ao mexer no que a composição consome, confira que o
+arquivo está dentro de `impressaoDoBundle()`; do contrário o `storage/remotion-bundle`
+serve um bundle velho por tempo indeterminado.
+
+**A regra mais larga:** cache com chave incompleta não falha, **mente**. Se
+algum dia o sintoma for "minha mudança não teve efeito nenhum", apagar
+`storage/remotion-bundle*` é o teste de uma linha que separa as duas hipóteses.
