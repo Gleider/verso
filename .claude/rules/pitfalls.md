@@ -598,7 +598,19 @@ antigo passa por novo.
 
 **Correção:** no arnês, apagar a saída antes (`rm -f`), checar
 `grep -q '"tipo":"erro"'` no stdout **e** exigir que o arquivo exista e não
-esteja vazio. Está em `scratchpad/renderizar.sh`.
+esteja vazio. Está em `scripts/fumaca-render.sh`, que roda dentro do contêiner:
+
+```bash
+docker compose -f infra/docker-compose.yml --env-file .env \
+  run --rm --no-deps -T --entrypoint sh worker -s <track-id> --gl \
+  < scripts/fumaca-render.sh
+```
+
+**Use `--gl`.** Sem ele o job sai com os padrões do `VideoSettings` — fundo em
+cor sólida e textura `none` —, e aí `precisaDeGl()` é **falso**: nenhum canvas
+é montado e o render não prova nada sobre a camada de shader, que é a única
+parte que o §27 diz não dar para testar fora do contêiner. Um render verde no
+modo simples é fácil de confundir com "o shader está bem".
 
 **Ao conferir quadro:** extraia num instante com movimento e com letra na
 tela (`-ss 4.0`), nunca no quadro 0 — em t=0 o pulso é zero, os efeitos

@@ -78,9 +78,25 @@ make lint       # ruff
 make typecheck  # tsc
 ```
 
-Para mudança visual, isso **não basta**: renderize e olhe. Dois defeitos reais
-deste projeto passaram por toda a suíte e só apareceram quando um quadro foi
-extraído e inspecionado.
+Para mudança visual, isso **não basta**: renderize e olhe. Três defeitos reais
+deste projeto (`pitfalls.md` §7, §12 e §26) passaram por toda a suíte e só
+apareceram quando um quadro foi extraído e inspecionado.
+
+O atalho para isso é o teste de fumaça — 7 segundos de vídeo, não uma faixa
+inteira:
+
+```bash
+docker compose -f infra/docker-compose.yml --env-file .env \
+  run --rm --no-deps -T --entrypoint sh worker -s <track-id> --gl \
+  < scripts/fumaca-render.sh
+```
+
+Ele deixa o quadro em `storage/renders/_fumaca_gl.png`. **Abra o arquivo.** Um
+render que termina com exit 0 não diz nada sobre o que apareceu na tela — e é
+exatamente esse o ponto dos três defeitos acima.
+
+Mexeu no worker, no Dockerfile ou na camada de shader? O `--gl` é obrigatório,
+e dentro do contêiner: `angle` passa na máquina com GPU e falha lá (§27).
 
 ## Python
 
