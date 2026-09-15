@@ -12,6 +12,12 @@
 # do próprio estágio de construção. A exclusão continua valendo mesmo assim —
 # é ela que evita transferir 1,1 GB de contexto numa build fria.
 apps/web/node_modules
+# E o do renderer, pelo mesmo motivo: ele não existe no fluxo normal (o
+# manifesto de `renderer/` só é instalado DENTRO da imagem), mas um `npm ci`
+# rodado ali por engano seria copiado pelo `COPY apps/web/renderer` e
+# sombrearia o node_modules correto do contêiner — Node resolve do diretório
+# mais próximo para cima.
+apps/web/renderer/node_modules
 apps/web/.next
 apps/web/tsconfig.tsbuildinfo
 
