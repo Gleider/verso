@@ -11,7 +11,8 @@
  */
 import { useMemo } from "react";
 import { useAudioData } from "@remotion/media-utils";
-import { construirEnvelopeDeBatida } from "./envelope";
+import { construirAnalise } from "./envelope";
+import type { AnaliseDeAudio } from "./envelope";
 
 /**
  * 16kHz, não o padrão de 48kHz: uma faixa de 3min30 estéreo decodificada a
@@ -21,15 +22,23 @@ import { construirEnvelopeDeBatida } from "./envelope";
  */
 export const TAXA_DE_ANALISE = 16_000;
 
-/** O pulso da batida por quadro, ou `null` enquanto o áudio não decodificou. */
-export function useEnvelopeDeBatida(
+/**
+ * Pulso da batida E espectro por quadro, ou `null` enquanto o áudio não
+ * decodificou.
+ *
+ * Um hook só para os dois porque saem da MESMA FFT: o visualizador não custa
+ * análise nenhuma além do que o pulso já pagava. E porque a regra dura acima
+ * exige um único chamador de `useAudioData` — um segundo hook para o espectro
+ * fixaria a taxa de amostragem errada para quem chamasse depois.
+ */
+export function useAnaliseDeAudio(
   src: string,
   fps: number,
   duracaoMs: number,
-): Float32Array | null {
+): AnaliseDeAudio | null {
   const dados = useAudioData(src, { sampleRate: TAXA_DE_ANALISE });
   return useMemo(
-    () => (dados ? construirEnvelopeDeBatida(dados, fps, duracaoMs) : null),
+    () => (dados ? construirAnalise(dados, fps, duracaoMs) : null),
     [dados, fps, duracaoMs],
   );
 }

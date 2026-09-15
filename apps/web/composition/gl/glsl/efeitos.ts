@@ -101,6 +101,37 @@ vec3 ef_halftone(vec2 uv, vec2 tam, float i) {
   return mix(vec3(1.0), cor, ponto);
 }
 
+/**
+ * Glitch: blocos deslocados, canais separados e rasgo de linha.
+ *
+ * O deslocamento troca em BLOCOS de tempo, não continuamente — glitch que
+ * desliza suave parece defeito de vídeo, não efeito. E o bloco vem de um
+ * floor sobre ms, então dois renders do mesmo quadro dão o mesmo salto.
+ */
+vec3 ef_glitch(vec2 uv, vec2 tam, float ms, float i, float pulso) {
+  float janela = floor(ms / 90.0);
+  float forca = mix(0.12, 1.0, i) * (0.6 + pulso);
+
+  // Faixas horizontais que saltam de lado.
+  float faixa = floor(uv.y * mix(8.0, 26.0, i));
+  float sorte = hash21(vec2(faixa, janela));
+  float salto = step(0.82 - 0.25 * i, sorte) * (hash21(vec2(faixa, janela + 3.0)) - 0.5);
+  vec2 d = vec2(salto * 0.12 * forca, 0.0);
+
+  // Separação de canais, mais larga onde a faixa saltou.
+  float sep = (2.0 + abs(salto) * 40.0) * forca / tam.x;
+  vec3 cor = vec3(
+    amostrar(uv + d + vec2(sep, 0.0)).r,
+    amostrar(uv + d).g,
+    amostrar(uv + d - vec2(sep, 0.0)).b
+  );
+
+  // Rasgo: uma linha clara atravessando, de vez em quando.
+  float y = hash21(vec2(janela, 17.0));
+  float rasgo = smoothstep(0.004, 0.0, abs(uv.y - y)) * step(0.7, hash21(vec2(janela, 29.0)));
+  return cor + rasgo * 0.45 * forca;
+}
+
 // --- superfícies (aplicadas DEPOIS de amostrar) ----------------------------
 
 /** Varredura horizontal, com rolagem lenta. */

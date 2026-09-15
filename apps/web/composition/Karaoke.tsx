@@ -1,11 +1,15 @@
 import { AbsoluteFill, Audio, useCurrentFrame, useVideoConfig } from "remotion";
-import { useEnvelopeDeBatida } from "./audio/useEnvelope";
+import { useAnaliseDeAudio } from "./audio/useEnvelope";
 import { carregarFontes } from "./fonts";
 import { DESIGN, escalaDeDesign } from "./formato";
 import { Fundo } from "./layers/Fundo";
 import { Letra } from "./layers/Letra";
+import { Particulas } from "./layers/Particulas";
 import { Veu } from "./layers/Veu";
+import { Visualizador } from "./layers/Visualizador";
+import { coresDoTexto } from "./palettes";
 import { msDoQuadro } from "./tempo";
+import { formaDoVisualizador } from "./visualizador";
 import type { KaraokeProps } from "./props";
 
 /**
@@ -29,11 +33,33 @@ export function Karaoke({ settings, versos, audioUrl, backgroundUrl, duracaoMs }
   const { fps } = useVideoConfig();
   const ms = msDoQuadro(frame, fps);
 
-  const envelope = useEnvelopeDeBatida(audioUrl, fps, duracaoMs);
-  const pulso = envelope ? (envelope[Math.min(frame, envelope.length - 1)] ?? 0) : 0;
+  // Um só chamador de `useAudioData` em todo o repositório, e uma só FFT: o
+  // pulso da batida e o espectro do visualizador saem da mesma análise.
+  const analise = useAnaliseDeAudio(audioUrl, fps, duracaoMs);
+  const pulso = analise ? (analise.pulso[Math.min(frame, analise.pulso.length - 1)] ?? 0) : 0;
 
   const design = DESIGN[settings.output.aspectRatio];
   const escala = escalaDeDesign(settings);
+
+  const forma = formaDoVisualizador(settings, analise, frame, pulso);
+  const corDoVisualizador = settings.visualizer.cor ?? coresDoTexto(settings.style).sung;
+  const temParticulas = settings.particulas.tipo !== "none";
+
+  const visualizador =
+    forma === null ? null : (
+      <Visualizador
+        forma={forma}
+        visualizer={settings.visualizer}
+        cor={corDoVisualizador}
+        design={design}
+      />
+    );
+  const particulas = temParticulas ? (
+    <Particulas settings={settings} ms={ms} pulso={pulso} />
+  ) : null;
+
+  const atras = settings.visualizer.camada === "atras";
+  const particulasAtras = settings.particulas.camada === "atras";
 
   return (
     <AbsoluteFill style={{ backgroundColor: settings.background.color }}>
@@ -51,7 +77,16 @@ export function Karaoke({ settings, versos, audioUrl, backgroundUrl, duracaoMs }
       >
         <Fundo settings={settings} ms={ms} pulso={pulso} src={backgroundUrl} />
         <Veu overlay={settings.style.overlay} />
+
+        {/* A ORDEM aqui é o controle de camada do painel: o que vem antes da
+            letra fica atrás dela, o que vem depois fica à frente. */}
+        {particulasAtras && particulas}
+        {atras && visualizador}
+
         <Letra settings={settings} versos={versos} ms={ms} pulso={pulso} backgroundUrl={backgroundUrl} />
+
+        {!atras && visualizador}
+        {!particulasAtras && particulas}
       </div>
       {audioUrl && <Audio src={audioUrl} />}
     </AbsoluteFill>

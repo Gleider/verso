@@ -51,7 +51,8 @@ apps/api             FastAPI: rotas, DTOs, SSE. Casca fina.
 apps/worker          ARQ: pipeline de transcrição e render de vídeo.
 apps/web             Next.js 15: biblioteca, editor de letra, editor de vídeo, player.
 apps/web/composition A definição do vídeo (Remotion) — preview E o MP4 exportado.
-apps/web/composition/efeitos  Os shaders GLSL: texturas, gradação de cor, fundos gerados.
+apps/web/composition/efeitos  Catálogo dos efeitos e a gradação de cor (CSS).
+apps/web/composition/gl       Os shaders GLSL: fundos gerados, efeitos, partículas.
 apps/web/renderer     Script Node (render.mjs) que grava o MP4.
 packages/core        Modelos SQLAlchemy, schemas Pydantic, config, storage, preparo de imagem.
 packages/audio       ffmpeg, metadados, Demucs.

@@ -23,6 +23,7 @@ import { PainelMotion } from "./PainelMotion";
 import { PainelStructure } from "./PainelStructure";
 import { PainelStyle } from "./PainelStyle";
 import { PainelTemplates } from "./PainelTemplates";
+import { PainelVisualizer } from "./PainelVisualizer";
 
 const SALVAR_DEPOIS_DE_MS = 500;
 
@@ -284,6 +285,13 @@ export function VideoEditor({ track, initialProject }: Props) {
             <PainelStructure settings={settings} onChange={atualizarSettings} />
           )}
           {aba === "style" && <PainelStyle settings={settings} onChange={atualizarSettings} />}
+          {aba === "visualizer" && (
+            <PainelVisualizer
+              settings={settings}
+              onChange={atualizarSettings}
+              temAudio={duracaoMs > 0}
+            />
+          )}
           {aba === "templates" && (
             <PainelTemplates
               currentSettings={settings}

@@ -1,3 +1,4 @@
+import { intensidadeComMovimento } from "../efeitos/movimento";
 import { AbsoluteFill, Img, staticFile } from "remotion";
 import { estadoAmbiente } from "../ambiente";
 import { combinarFiltros, filtroDeCor } from "../efeitos/cor";
@@ -60,7 +61,11 @@ export function Fundo({ settings, ms, pulso, src }: Props) {
   const usaGl = precisaDeGl(settings);
 
   const estadoCss =
-    texturaCssPorId(settings.style.texture)?.estado(ms, settings.style.textureIntensity, pulso) ??
+    texturaCssPorId(settings.style.texture)?.estado(
+      ms,
+      intensidadeComMovimento(settings.style, ms, pulso),
+      pulso,
+    ) ??
     ESTADO_CSS_NEUTRO;
 
   const camada: React.CSSProperties = {

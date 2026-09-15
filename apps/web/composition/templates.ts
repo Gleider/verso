@@ -29,6 +29,8 @@ function combinar(parcial: {
   motion?: Partial<VideoSettings["motion"]>;
   structure?: Partial<VideoSettings["structure"]>;
   style?: Partial<VideoSettings["style"]>;
+  visualizer?: Partial<VideoSettings["visualizer"]>;
+  particulas?: Partial<VideoSettings["particulas"]>;
 }): VideoSettings {
   return {
     background: { ...SETTINGS_PADRAO.background, ...parcial.background },
@@ -36,6 +38,8 @@ function combinar(parcial: {
     motion: { ...SETTINGS_PADRAO.motion, ...parcial.motion },
     structure: { ...SETTINGS_PADRAO.structure, ...parcial.structure },
     style: { ...SETTINGS_PADRAO.style, ...parcial.style },
+    visualizer: { ...SETTINGS_PADRAO.visualizer, ...parcial.visualizer },
+    particulas: { ...SETTINGS_PADRAO.particulas, ...parcial.particulas },
     output: { ...SETTINGS_PADRAO.output },
   };
 }

@@ -1,3 +1,5 @@
+import type { MovimentoId } from "./efeitos/movimento";
+
 /**
  * O que o editor de vídeo configura, e o que a composição lê.
  *
@@ -47,7 +49,8 @@ export type TextureId =
   | "emboss"
   | "contour"
   | "tvoff"
-  | "monocromatico";
+  | "monocromatico"
+  | "glitch";
 
 export type OverlayId = "none" | "scrim-bottom" | "scrim-full" | "vignette";
 
@@ -59,7 +62,8 @@ export type FontFamilyId =
   | "archivo-black"
   | "bebas"
   | "playfair"
-  | "space-grotesk";
+  | "space-grotesk"
+  | "cascadia";
 
 export type FontSize = "small" | "medium" | "large";
 export type AlignH = "left" | "center" | "right";
@@ -78,6 +82,21 @@ export type TweakId = "none" | "floating";
 export type SyncId = "line" | "word" | "syllable";
 
 export type LyricsPosition = "top" | "center" | "bottom";
+
+/** Formas de visualizador de áudio. Todas desenhadas em DOM, sem canvas. */
+export type VisualizerId = "none" | "barras" | "onda" | "circular" | "anel";
+
+/** Sistemas de partícula. Um passe de shader, procedural. */
+export type ParticulaId =
+  | "none"
+  | "poeira"
+  | "neve"
+  | "fagulhas"
+  | "estrelas"
+  | "vagalumes";
+
+/** Onde uma camada fica em relação à letra. */
+export type CamadaId = "atras" | "frente";
 
 export type VideoSettings = {
   background: {
@@ -143,7 +162,58 @@ export type VideoSettings = {
     corPorCantar: string | null;
     texture: TextureId;
     textureIntensity: number;
+    /**
+     * Movimento da intensidade do efeito ao longo do tempo.
+     *
+     * Intensidade fixa cansa: em dez segundos o olho para de ver o efeito. O
+     * movimento devolve presença sem precisar de um efeito mais forte, que é
+     * o caminho que acaba cobrindo a letra. Ver `efeitos/movimento.ts`.
+     */
+    movimento: MovimentoId;
+    /** Quão rápido o movimento vai e volta. */
+    movimentoVelocidade: number;
+    /** Quanto da intensidade o movimento pode TIRAR. Em 1, o efeito some e volta. */
+    movimentoProfundidade: number;
     overlay: OverlayId;
+  };
+  /**
+   * Visualizador de áudio. Desenhado em DOM (divs com `transform`), não em
+   * canvas: é a regra de CSS primeiro, e um punhado de barras custa nada.
+   */
+  visualizer: {
+    tipo: VisualizerId;
+    /** Atrás ou à frente da letra. */
+    camada: CamadaId;
+    posicao: LyricsPosition;
+    /** Altura, como fração da altura do quadro. */
+    tamanho: number;
+    /** Largura, como fração da largura do quadro. */
+    largura: number;
+    opacidade: number;
+    /** Quanto o áudio move o desenho, de 0 a 1. */
+    intensidade: number;
+    /** `null` usa a cor de texto cantado da paleta. */
+    cor: string | null;
+    /** Espelha o desenho no eixo horizontal. */
+    espelhado: boolean;
+  };
+  /**
+   * Partículas. SOMAM-SE à textura em vez de substituí-la: são uma camada
+   * própria, com shader próprio, porque "granulado + neve" é uma combinação
+   * que faz sentido e o catálogo de textura não permitiria.
+   */
+  particulas: {
+    tipo: ParticulaId;
+    camada: CamadaId;
+    /** Densidade, de 0 a 1. */
+    quantidade: number;
+    tamanho: number;
+    velocidade: number;
+    opacidade: number;
+    /** Quanto a batida acelera e acende as partículas. */
+    reacaoBatida: number;
+    /** `null` usa a cor natural do tipo escolhido. */
+    cor: string | null;
   };
   output: {
     aspectRatio: AspectRatio;
@@ -152,7 +222,9 @@ export type VideoSettings = {
   };
 };
 
-export const SETTINGS_VERSION = 3;
+export type { MovimentoId };
+
+export const SETTINGS_VERSION = 5;
 
 export const SETTINGS_PADRAO: VideoSettings = {
   background: {
@@ -201,7 +273,33 @@ export const SETTINGS_PADRAO: VideoSettings = {
     corPorCantar: null,
     texture: "none",
     textureIntensity: 0.5,
+    // Parado por padrão: ligar movimento sozinho mudaria o visual de todo
+    // projeto já salvo sem ninguém pedir.
+    movimento: "none",
+    movimentoVelocidade: 0.4,
+    movimentoProfundidade: 0.6,
     overlay: "none",
+  },
+  visualizer: {
+    tipo: "none",
+    camada: "atras",
+    posicao: "bottom",
+    tamanho: 0.18,
+    largura: 0.8,
+    opacidade: 0.75,
+    intensidade: 0.7,
+    cor: null,
+    espelhado: false,
+  },
+  particulas: {
+    tipo: "none",
+    camada: "frente",
+    quantidade: 0.5,
+    tamanho: 0.5,
+    velocidade: 0.5,
+    opacidade: 0.6,
+    reacaoBatida: 0.4,
+    cor: null,
   },
   output: {
     aspectRatio: "16:9",
@@ -238,6 +336,8 @@ export function normalizarSettings(bruto: unknown): VideoSettings {
     motion: { ...SETTINGS_PADRAO.motion, ...b.motion },
     structure,
     style: { ...SETTINGS_PADRAO.style, ...b.style },
+    visualizer: { ...SETTINGS_PADRAO.visualizer, ...b.visualizer },
+    particulas: { ...SETTINGS_PADRAO.particulas, ...b.particulas },
     output: { ...SETTINGS_PADRAO.output, ...b.output },
   };
 }

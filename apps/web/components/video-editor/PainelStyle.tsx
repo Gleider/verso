@@ -1,12 +1,13 @@
 "use client";
 
 import { CATALOGO_DE_TEXTURAS, itemDeTextura } from "@/composition/efeitos/catalogo";
+import { MOVIMENTOS } from "@/composition/efeitos/movimento";
 import { aplicarCombinacao, COMBINACOES } from "@/composition/estilos";
 import { coresDoTexto, PALETAS } from "@/composition/palettes";
 import type { OverlayId } from "@/composition/settings";
 import type { VideoSettings } from "@/lib/types";
 import { BotaoDeGrupo } from "./BotaoDeGrupo";
-import { comoPorcento, Deslizador, Secao } from "./Controles";
+import { comoPorcento, corSolida, Deslizador, Secao } from "./Controles";
 
 interface Props {
   settings: VideoSettings;
@@ -19,21 +20,6 @@ const OVERLAYS: { id: OverlayId; rotulo: string }[] = [
   { id: "scrim-full", rotulo: "Véu completo" },
   { id: "vignette", rotulo: "Vinheta" },
 ];
-
-/**
- * `<input type="color">` só aceita `#rrggbb`.
- *
- * As paletas guardam `rgba(...)` porque o texto por cantar tem transparência;
- * passar isso direto para o input o deixa preto, e o usuário via a cor errada
- * no seletor antes mesmo de mexer nele.
- */
-function corSolida(valor: string): string {
-  if (valor.startsWith("#")) return valor.slice(0, 7);
-  const n = valor.match(/[\d.]+/g);
-  if (!n || n.length < 3) return "#ffffff";
-  const hex = (v: string) => Math.round(Number(v)).toString(16).padStart(2, "0");
-  return `#${hex(n[0])}${hex(n[1])}${hex(n[2])}`;
-}
 
 /** Aba Style: combinações prontas e, abaixo, cada peça em separado. */
 export function PainelStyle({ settings, onChange }: Props) {
@@ -155,15 +141,61 @@ export function PainelStyle({ settings, onChange }: Props) {
           {itemDeTextura(style.texture).tipo === "shader" && " (efeito pesado: o ponto no botão marca os que rodam na GPU a cada quadro)"}
         </span>
         {style.texture !== "none" && (
-          <Deslizador
-            rotulo="intensidade do efeito"
-            valor={style.textureIntensity}
-            min={0}
-            max={1}
-            step={0.01}
-            onChange={(textureIntensity) => atualizar({ textureIntensity })}
-            formatar={comoPorcento}
-          />
+          <>
+            <Deslizador
+              rotulo="intensidade do efeito"
+              valor={style.textureIntensity}
+              min={0}
+              max={1}
+              step={0.01}
+              onChange={(textureIntensity) => atualizar({ textureIntensity })}
+              formatar={comoPorcento}
+            />
+
+            <span className="pt-1 font-mono text-[11px] uppercase tracking-wide text-ink-3">
+              movimento da intensidade
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {MOVIMENTOS.map((m) => (
+                <BotaoDeGrupo
+                  key={m.id}
+                  ativo={style.movimento === m.id}
+                  onClick={() => atualizar({ movimento: m.id })}
+                  dica={m.dica}
+                >
+                  {m.rotulo}
+                </BotaoDeGrupo>
+              ))}
+            </div>
+            {style.movimento !== "none" && (
+              <>
+                {style.movimento !== "batida" && (
+                  <Deslizador
+                    rotulo="velocidade"
+                    valor={style.movimentoVelocidade}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    onChange={(movimentoVelocidade) => atualizar({ movimentoVelocidade })}
+                    formatar={comoPorcento}
+                  />
+                )}
+                <Deslizador
+                  rotulo="profundidade"
+                  valor={style.movimentoProfundidade}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  onChange={(movimentoProfundidade) => atualizar({ movimentoProfundidade })}
+                  formatar={comoPorcento}
+                />
+                <span className="text-[11px] text-ink-3">
+                  A profundidade diz quanto o movimento pode TIRAR da intensidade — em 100% o
+                  efeito chega a sumir e volta. Nunca passa do valor escolhido acima.
+                </span>
+              </>
+            )}
+          </>
         )}
       </Secao>
 

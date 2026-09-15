@@ -541,3 +541,73 @@ causa. Pelo mesmo caminho, ler um `.ts` e regravá-lo produz dupla codificação
 BOM**. E para editar código, use as ferramentas de edição do agente, nunca
 `Get-Content | Set-Content` — só o `-Encoding utf8` não salva, porque o
 estrago acontece na *leitura*.
+
+## 31. Crase dentro do GLSL termina o template literal
+
+**Sintoma:** o bundle do render falha com um erro de *TypeScript* num arquivo
+de shader — `Expected ";" but found "length"` — apontando para dentro de um
+comentário GLSL, onde não há código nenhum.
+
+**Causa:** o GLSL deste projeto mora em template literal
+(``export const PARTICULAS = /* glsl */ ` ... ` ``). Uma crase escrita **dentro**
+desse texto fecha a string ali, e o resto do shader vira código TypeScript
+inválido. O hábito de marcar identificador com crase em comentário — que é a
+convenção de comentário do resto do repositório — é justamente o que faz isso.
+
+Já aconteceu três vezes, sempre com um nome técnico entre crases num
+comentário do shader (`object-fit: cover`, `floor(ms/...)`, `length`).
+
+**Correção:** em comentário dentro de GLSL, escreva o identificador **sem
+crase**. Para conferir um arquivo de shader:
+
+```bash
+node -e "const s=require('fs').readFileSync('gl/glsl/particulas.ts','utf8');
+const c=s.slice(s.indexOf('export const'));
+process.exit((c.match(/\`/g)||[]).length===2?0:1)"
+```
+
+**A lição maior:** `npx tsc --noEmit` pega isto em segundos. Renderizar para
+descobrir erro de sintaxe é gastar minutos por um retorno que o compilador dá
+de graça — rode o tsc **antes** do arnês de render, sempre.
+
+## 32. `render.mjs` reporta erro no stdout, e o MP4 velho completa a ilusão
+
+**Sintoma:** um lote de renders de conferência "passa", os PNGs saem, você
+olha os quadros e conclui coisas sobre o shader. Só que o shader nem compilou.
+
+**Causa:** duas somadas. `render.mjs` emite **NDJSON no stdout**, inclusive o
+`{"tipo":"erro"}` — é o contrato com o worker Python (o stderr fica para
+diagnóstico do Chromium). Um arnês que procura falha no stderr não vê nada.
+E, como o job grava sempre no mesmo caminho, o **MP4 da execução anterior**
+continua ali: o `ffmpeg` extrai um quadro dele sem reclamar, e o quadro
+antigo passa por novo.
+
+**Correção:** no arnês, apagar a saída antes (`rm -f`), checar
+`grep -q '"tipo":"erro"'` no stdout **e** exigir que o arquivo exista e não
+esteja vazio. Está em `scratchpad/renderizar.sh`.
+
+**Ao conferir quadro:** extraia num instante com movimento e com letra na
+tela (`-ss 4.0`), nunca no quadro 0 — em t=0 o pulso é zero, os efeitos
+animados estão no repouso e ainda não há verso ativo. Um quadro 0 faz
+qualquer efeito temporal parecer morto.
+
+## 33. Ramo de settings pela metade vira NaN, e NaN não desenha nada
+
+**Sintoma:** uma camada some do vídeo **só num ambiente** — no contêiner, ou
+com um job montado à mão — enquanto local, com as mesmas settings "iguais",
+ela aparece. Exit 0, nenhum erro, nenhum aviso. Parece problema de `swangle`
+(§27) e não é.
+
+**Causa:** um ramo de `VideoSettings` chegou **incompleto**. Em
+`{...s.particulas, tipo: "neve"}` sobre um JSON antigo que não tinha o ramo,
+sobram campos `undefined`; `0.2 + undefined * 1.8` é **NaN**, o uniforme vai
+NaN para o shader, e toda comparação com NaN é falsa — o campo inteiro deixa
+de ser desenhado. A camada de DOM morre do mesmo jeito: uma largura NaN dá
+uma caixa de tamanho nenhum.
+
+**Correção:** todo job montado à mão parte de um `VideoSettings` **completo**
+(no caminho real quem garante isso é o Pydantic do worker e o
+`normalizarSettings()` do TypeScript — nenhum dos dois roda quando se escreve
+o JSON na unha). Ao suspeitar disto, compare o **tamanho do MP4**: dois
+renders de configurações diferentes com byte count idêntico querem dizer que
+a diferença não chegou.

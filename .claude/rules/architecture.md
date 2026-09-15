@@ -158,12 +158,59 @@ Divisão dos arquivos, seguindo a regra de `.ts` puro e `.tsx` só aplicando:
 | `gl/programa.ts` | compila e cacheia por combinação — recompilar por quadro custaria dezenas de ms |
 | `gl/uniformes.ts` | `settings -> uniformes`, função pura e testável sem GPU |
 | `gl/contexto.ts` | o contexto, o `drawArrays` |
-| `layers/Tela.tsx` | o único `.tsx`: o canvas |
+| `gl/textura.ts` | a imagem de fundo como textura GL, cacheada por URL |
+| `gl/particulas.ts` | o segundo contexto, transparente, das partículas |
+| `layers/Tela.tsx` | o `.tsx` do canvas do fundo |
+| `layers/Particulas.tsx` | o `.tsx` do canvas das partículas |
 
 Consequências operacionais que **falham em silêncio**: o render precisa de
 `gl: "swangle"` (`pitfalls.md` §27), o contexto precisa de
 `preserveDrawingBuffer: true` (senão o MP4 sai em branco e o preview não),
 e o hash de ruído dos exemplos da internet quebra em ANGLE (§29).
+
+### As camadas que somam: visualizador e partículas
+
+Textura é **superfície**: só uma vale por vez, e a escolhida substitui a
+anterior. Visualizador de áudio e partículas não são isso — são **camadas**,
+e somam. "Granulado + neve + barras" é um pedido legítimo, e o catálogo de
+textura não tem como atendê-lo. Por isso as duas saíram da aba Style e têm
+aba própria (`components/video-editor/PainelVisualizer.tsx`), com o ramo
+`visualizer` e o ramo `particulas` no `VideoSettings`.
+
+Cada uma escolhe se fica **atrás ou à frente da letra**, e quem aplica isso é
+a ordem dos filhos em `Karaoke.tsx` — não há z-index disputando:
+
+```
+Fundo → Véu → [partículas atrás] → [visualizador atrás]
+      → Letra → [visualizador à frente] → [partículas à frente]
+```
+
+O visualizador é **DOM puro** (barras com `transform: scaleY`, onda e
+circular em SVG embutido): a geometria já é vetorial e não amostra pixel
+nenhum, então cai do lado CSS da pergunta acima. As partículas são GLSL, num
+contexto **transparente** próprio — é o preço de desenhar milhares de pontos
+macios sem um nó de DOM por ponto.
+
+As faixas do visualizador saem da **mesma FFT** do pulso da batida
+(`audio/envelope.ts`), e não de uma segunda análise: a regra de uma só porta
+para o áudio continua valendo (regra 5 abaixo). Mas a escala do pulso é
+calibrada para o **detector de batida** (`pitfalls.md` §17) e não pode mudar,
+então a exibição tem escala própria, em dois passos:
+
+1. `audio/bandas.ts:normalizarParaExibicao()` guarda as faixas em **dB** e
+   normaliza **por faixa, ao longo da música inteira** — cada faixa usa o
+   próprio alcance (por isso reage), mas a altura máxima que alcança vem do
+   nível absoluto dela (por isso faixa fraca continua parecendo fraca, em vez
+   de virar chiado esticado até o teto).
+2. `visualizador.ts:reagir()` dá o **contraste**, misturando um repouso com o
+   sinal elevado a 1,8 conforme o controle de reação.
+
+Os dois passos são necessários, e a medição diz por quê. Guardando as faixas
+na escala do detector, **28% das amostras ficavam grudadas no teto** — era o
+que deixava a linha da onda reta no meio, já que o centro dela é o grave. A
+normalização derrubou isso para 7,6%, mas o movimento quadro a quadro ficou
+igual (0,093 contra 0,088 de escala cheia): espalhar a escala tira o "reto",
+não dá "reativo". O contraste é que separa pico de rotina.
 
 As fotos da biblioteca (`public/fundos/`) são domínio público ou CC0, e só.
 Ver `public/fundos/CREDITOS.md`: atribuição de CC BY teria de viajar dentro de
@@ -189,6 +236,22 @@ Todo arquivo sob `composition/` e `renderer/` segue isto, porque quebrá-las
    Remotion é indexado só pelo `src` e ignora as opções.
 6. **Lógica pura em `.ts`, componentes em `.tsx`.** Os `.tsx` de `layers/`
    só escrevem `style`.
+
+### Movimento da intensidade do efeito
+
+`efeitos/movimento.ts` faz a intensidade do efeito respirar ao longo do tempo
+(senoidal, deriva ou na batida). Existe porque intensidade fixa cansa: em dez
+segundos o olho para de ver o efeito, e a saída óbvia — subir a intensidade —
+é a que acaba cobrindo a letra.
+
+É função **pura do relógio e do pulso**, como todo o resto da composição: a
+deriva é soma de três senoides de períodos incomensuráveis, não ruído com
+estado, porque o Remotion pede quadro fora de ordem (regra 4 abaixo).
+
+Fica em `efeitos/` e não dentro de um dos caminhos porque vale para os
+**dois**: `gl/uniformes.ts` (shader) e `layers/Fundo.tsx` (textura de CSS)
+chamam a mesma função. O movimento só **tira** intensidade, nunca acrescenta —
+o valor escolhido no painel continua sendo o teto do que se vê.
 
 ### O caminho do render
 

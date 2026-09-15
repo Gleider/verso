@@ -5,6 +5,7 @@
  * `settings -> uniformes` sem GPU, sem DOM e sem Chromium, que é a mesma
  * regra do resto de `composition/`.
  */
+import { intensidadeComMovimento } from "../efeitos/movimento";
 import { EFEITOS_GL, FUNDOS_GERADOS, type Combinacao, type EfeitoGl, type FundoGerado } from "./fonte";
 import type { VideoSettings } from "../settings";
 
@@ -73,7 +74,7 @@ export function uniformesDe(
     ms,
     pulso: clamp(pulso, 0, 1),
     ambiente: clamp(settings.background.ambientIntensity, 0, 1),
-    intensidade: clamp(settings.style.textureIntensity, 0, 1),
+    intensidade: intensidadeComMovimento(settings.style, ms, pulso),
     cor: corParaRgb(settings.background.color),
   };
 }

@@ -88,5 +88,20 @@ export function Interruptor({
   );
 }
 
+/**
+ * `<input type="color">` só aceita `#rrggbb`.
+ *
+ * As paletas guardam `rgba(...)` porque o texto por cantar tem transparência;
+ * passar isso direto para o input o deixa preto, e o usuário via a cor errada
+ * no seletor antes mesmo de mexer nele.
+ */
+export function corSolida(valor: string): string {
+  if (valor.startsWith("#")) return valor.slice(0, 7);
+  const n = valor.match(/[\d.]+/g);
+  if (!n || n.length < 3) return "#ffffff";
+  const hex = (v: string) => Math.round(Number(v)).toString(16).padStart(2, "0");
+  return `#${hex(n[0])}${hex(n[1])}${hex(n[2])}`;
+}
+
 /** Percentual de 0 a 1, o formato mais usado nos painéis. */
 export const comoPorcento = (v: number) => `${Math.round(v * 100)}%`;

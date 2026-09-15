@@ -55,6 +55,11 @@ export const TEXTURAS: Textura[] = [
     descricao: "Borrão radial que salta na batida.",
   },
   {
+    id: "glitch",
+    rotulo: "Glitch",
+    descricao: "Faixas saltam de lado, os canais se separam e a linha rasga.",
+  },
+  {
     id: "pixelate",
     rotulo: "Pixelado",
     descricao: "Blocos grandes, que encolhem quando a música bate.",

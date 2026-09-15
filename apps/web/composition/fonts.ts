@@ -9,7 +9,7 @@
  * render espera a fonte carregar antes do quadro 0, e falha alto se não
  * carregar, em vez de sair calado com a fonte errada.
  *
- * As oito famílias da spec, todas SIL OFL. As seis primeiras variam o peso
+ * As nove famílias, todas SIL OFL. As seis primeiras variam o peso
  * num eixo contínuo (um arquivo cobre o intervalo inteiro); Anton, Archivo
  * Black e Bebas Neue são **estáticas de um peso só** — é por isso que
  * `pesoSuportado()` existe: sem ele o controle de peso parecia quebrado
@@ -79,6 +79,15 @@ export const FONTES: FamiliaDeFonte[] = [
     arquivo: "fonts/jetbrains-mono.woff2",
     pesoMin: 100,
     pesoMax: 800,
+    fallback: "monospace",
+  },
+  {
+    id: "cascadia",
+    family: "Cascadia Mono",
+    rotulo: "Cascadia Mono",
+    arquivo: "fonts/cascadia-mono.woff2",
+    pesoMin: 200,
+    pesoMax: 700,
     fallback: "monospace",
   },
   {

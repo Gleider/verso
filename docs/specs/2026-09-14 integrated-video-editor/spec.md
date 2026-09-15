@@ -25,6 +25,23 @@ implementação), com uma segunda rodada de ajustes depois do primeiro uso real.
   contra empacotar fotos; a restrição real era de **licença**, não de formato.
   Há 9 fundos gerados em GLSL e 7 fotos de domínio público/CC0
   (`public/fundos/CREDITOS.md`).
+- **Nasceu uma aba que a spec não previa: Visualizer.** §6.5 tratava tudo que
+  é pixel como "textura", e textura é **superfície** — só uma vale por vez.
+  Visualizador de áudio e partículas não cabem nessa regra: eles **somam**, e
+  "granulado + neve + barras" é um pedido legítimo. Por isso saíram do
+  catálogo de textura e ganharam aba própria, cada um com posição, tamanho,
+  cor e a escolha de ficar **atrás ou à frente da letra**.
+
+  O visualizador tem quatro formas (barras, onda, circular, anel) e é **DOM
+  puro** — a geometria não amostra pixel nenhum, então cai do lado CSS da
+  regra de desempenho. As partículas são cinco (poeira, neve, fagulhas,
+  estrelas, vaga-lumes) e são GLSL, num contexto transparente próprio.
+- **A intensidade do efeito ganhou movimento próprio.** §6.5 tratava a
+  intensidade como um número fixo. Fixa ela cansa: em dez segundos o olho para
+  de ver o efeito, e a saída óbvia — aumentar — é a que acaba cobrindo a letra.
+  Um seletor de movimento (senoidal, deriva, na batida) com velocidade e
+  profundidade resolve isso sem efeito mais forte. O movimento só **tira**
+  intensidade: o valor escolhido continua sendo o teto.
 - **A sincronia por palavra e por sílaba depende dos dados.** Letra vinda de
   `.lrc` ou do Musixmatch tem tempo por verso; nesse caso o controle fica
   desabilitado, em vez de oferecer uma opção que não muda nada.
@@ -40,8 +57,9 @@ implementação), com uma segunda rodada de ajustes depois do primeiro uso real.
 - **Miniaturas de template por `renderStill()`** (§6.6). A aba mostra o fundo
   real e o nome, não um quadro da composição — então um template com fonte ou
   movimento marcante parece igual a outro com o mesmo fundo.
-- **Uma família cursiva** (§6.2). As oito famílias existem, mas o repertório
-  ficou sem a cursiva que a spec lista.
+- **Uma família cursiva** (§6.2). São nove famílias hoje (as oito da spec
+  mais a Cascadia Mono), mas o repertório continua sem a cursiva que a spec
+  lista.
 
 Substitui o botão "gerar 1080p" por uma tela de edição onde o vídeo é montado
 olhando para ele, e não imaginando como vai ficar.

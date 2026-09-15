@@ -1,15 +1,23 @@
-/** As seis abas do editor, na ordem da barra lateral. */
+/** As sete abas do editor, na ordem da barra lateral. */
 import {
   ArrowsPointingOutIcon,
   LanguageIcon,
   PhotoIcon,
   RectangleGroupIcon,
   SparklesIcon,
+  SignalIcon,
   Squares2X2Icon,
 } from "@heroicons/react/24/outline";
 import type { ComponentType, SVGProps } from "react";
 
-export type AbaId = "background" | "font" | "motion" | "structure" | "style" | "templates";
+export type AbaId =
+  | "background"
+  | "font"
+  | "motion"
+  | "structure"
+  | "style"
+  | "visualizer"
+  | "templates";
 
 export interface DefinicaoDeAba {
   id: AbaId;
@@ -50,6 +58,12 @@ export const ABAS: DefinicaoDeAba[] = [
     rotulo: "Style",
     Icone: SparklesIcon,
     dica: "Estilo: combinações prontas, cores e efeitos de vídeo",
+  },
+  {
+    id: "visualizer",
+    rotulo: "Visualizer",
+    Icone: SignalIcon,
+    dica: "Camadas que somam por cima: visualizador de áudio e partículas",
   },
   {
     id: "templates",

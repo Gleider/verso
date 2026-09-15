@@ -36,6 +36,7 @@ export const EFEITOS_GL = [
   "zoomblur",
   "pixelate",
   "bloom",
+  "glitch",
 ] as const;
 
 export type EfeitoGl = (typeof EFEITOS_GL)[number];
@@ -147,7 +148,9 @@ ${
           ? "  cor = ef_bloom(uv, uTamanho, i, uPulso);"
           : c.efeito === "halftone"
             ? "  cor = ef_halftone(uv, uTamanho, i);"
-            : "  cor = amostrar(uv);"
+            : c.efeito === "glitch"
+              ? "  cor = ef_glitch(uv, uTamanho, uMs, i, uPulso);"
+              : "  cor = amostrar(uv);"
 }
 
   // 3) superfícies, depois de ter a cor

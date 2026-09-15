@@ -205,6 +205,7 @@ class FontSettings(BaseModel):
         "bebas",
         "playfair",
         "space-grotesk",
+        "cascadia",
     ] = "bricolage"
     size: Literal["small", "medium", "large"] = "medium"
     escala: float = Field(default=1.0, ge=0.5, le=2.0)
@@ -259,8 +260,9 @@ class StyleSettings(BaseModel):
     #: Seleção livre de cor. `None` usa a paleta.
     corCantada: str | None = None
     corPorCantar: str | None = None
-    #: Os nove primeiros são os ids históricos, agora implementados como
-    #: shader GLSL (`@remotion/effects`); os demais só existiram depois disso.
+    #: Os nove primeiros são os ids históricos; os demais só existiram depois.
+    #: Hoje cada um cai em CSS ou em GLSL próprio (`composition/gl/`), conforme
+    #: precise ou não amostrar os pixels vizinhos — `architecture.md`.
     texture: Literal[
         "none",
         "grain",
@@ -281,9 +283,44 @@ class StyleSettings(BaseModel):
         "contour",
         "tvoff",
         "monocromatico",
+        "glitch",
     ] = "none"
     textureIntensity: float = Field(default=0.5, ge=0.0, le=1.0)
+    #: Movimento da intensidade do efeito ao longo do tempo. Espelha
+    #: `MovimentoId` de `composition/efeitos/movimento.ts`. Parado por padrão:
+    #: ligar sozinho mudaria o visual de todo projeto já salvo.
+    movimento: Literal["none", "senoide", "deriva", "batida"] = "none"
+    movimentoVelocidade: float = Field(default=0.4, ge=0.0, le=1.0)
+    movimentoProfundidade: float = Field(default=0.6, ge=0.0, le=1.0)
     overlay: Literal["none", "scrim-bottom", "scrim-full", "vignette"] = "none"
+
+
+class VisualizerSettings(BaseModel):
+    """Visualizador de áudio. Desenhado em DOM, não em canvas."""
+
+    tipo: Literal["none", "barras", "onda", "circular", "anel"] = "none"
+    camada: Literal["atras", "frente"] = "atras"
+    posicao: Literal["top", "center", "bottom"] = "bottom"
+    tamanho: float = Field(default=0.18, ge=0.02, le=1.0)
+    largura: float = Field(default=0.8, ge=0.1, le=1.0)
+    opacidade: float = Field(default=0.75, ge=0.0, le=1.0)
+    intensidade: float = Field(default=0.7, ge=0.0, le=1.0)
+    #: `None` usa a cor de texto cantado da paleta.
+    cor: str | None = None
+    espelhado: bool = False
+
+
+class ParticulasSettings(BaseModel):
+    """Partículas. Camada própria, que SOMA com a textura em vez de trocá-la."""
+
+    tipo: Literal["none", "poeira", "neve", "fagulhas", "estrelas", "vagalumes"] = "none"
+    camada: Literal["atras", "frente"] = "frente"
+    quantidade: float = Field(default=0.5, ge=0.0, le=1.0)
+    tamanho: float = Field(default=0.5, ge=0.0, le=1.0)
+    velocidade: float = Field(default=0.5, ge=0.0, le=1.0)
+    opacidade: float = Field(default=0.6, ge=0.0, le=1.0)
+    reacaoBatida: float = Field(default=0.4, ge=0.0, le=1.0)
+    cor: str | None = None
 
 
 class OutputSettings(BaseModel):
@@ -295,7 +332,7 @@ class OutputSettings(BaseModel):
 #: Espelha `SETTINGS_VERSION` de `composition/settings.ts`. Sobe quando o
 #: formato muda; a leitura continua tolerante (campo que falta vira padrão dos
 #: dois lados), então isto é diagnóstico, não porta de migração.
-VERSAO_DO_FORMATO = 3
+VERSAO_DO_FORMATO = 5
 
 
 class VideoSettings(BaseModel):
@@ -306,6 +343,8 @@ class VideoSettings(BaseModel):
     motion: MotionSettings = Field(default_factory=MotionSettings)
     structure: StructureSettings = Field(default_factory=StructureSettings)
     style: StyleSettings = Field(default_factory=StyleSettings)
+    visualizer: VisualizerSettings = Field(default_factory=VisualizerSettings)
+    particulas: ParticulasSettings = Field(default_factory=ParticulasSettings)
     output: OutputSettings = Field(default_factory=OutputSettings)
 
 

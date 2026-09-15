@@ -22,7 +22,13 @@ export type CombinacaoDeEstilo = {
    * `aplicarCombinacao` limpa a seleção livre. Manter a cor antiga por cima
    * faria a combinação sair diferente do cartão que o usuário clicou.
    */
-  style: Omit<VideoSettings["style"], "corCantada" | "corPorCantar">;
+  // O movimento da intensidade fica de fora de propósito: preset escolhe
+  // aparência (paleta, textura, véu), não o ritmo com que ela respira — isso é
+  // ajuste de quem monta, e herda o padrão.
+  style: Omit<
+    VideoSettings["style"],
+    "corCantada" | "corPorCantar" | "movimento" | "movimentoVelocidade" | "movimentoProfundidade"
+  >;
   /** Gradação de cor do fundo — o que dá caráter à imagem. */
   cor: Pick<VideoSettings["background"], "saturacao" | "contraste" | "brilho" | "matiz" | "darken">;
   /** Os efeitos do texto que fazem parte do visual. */
@@ -138,6 +144,9 @@ export function aplicarCombinacao(
     ...settings,
     background: { ...settings.background, ...combinacao.cor },
     font: { ...settings.font, ...combinacao.texto },
-    style: { ...combinacao.style, corCantada: null, corPorCantar: null },
+    // Parte de `settings.style`, e nao de um objeto novo: o preset escolhe
+    // aparencia e o movimento da intensidade e ajuste de quem monta — aplicar
+    // uma combinacao nao pode apagar o que a pessoa ja tinha regulado.
+    style: { ...settings.style, ...combinacao.style, corCantada: null, corPorCantar: null },
   };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MediaUtilsAudioData } from "@remotion/media-utils";
-import { construirEnvelopeDeBatida } from "../envelope";
+import { construirAnalise, N_BANDAS } from "../envelope";
 
 const SAMPLE_RATE = 16_000;
 const FPS = 30;
@@ -48,10 +48,10 @@ function audioComUmaRajada(duracaoMs: number): MediaUtilsAudioData {
   };
 }
 
-describe("construirEnvelopeDeBatida", () => {
+describe("construirAnalise", () => {
   it("produz um Float32Array com um valor por quadro", () => {
     const dados = audioComUmaRajada(1000);
-    const envelope = construirEnvelopeDeBatida(dados, FPS, 1000);
+    const { pulso: envelope } = construirAnalise(dados, FPS, 1000);
 
     expect(envelope).toBeInstanceOf(Float32Array);
     expect(envelope.length).toBe(30);
@@ -60,15 +60,15 @@ describe("construirEnvelopeDeBatida", () => {
   it("é determinístico — mesma entrada, mesmo envelope, sempre", () => {
     const dados = audioComUmaRajada(3000);
 
-    const primeiro = construirEnvelopeDeBatida(dados, FPS, 3000);
-    const segundo = construirEnvelopeDeBatida(dados, FPS, 3000);
+    const { pulso: primeiro } = construirAnalise(dados, FPS, 3000);
+    const { pulso: segundo } = construirAnalise(dados, FPS, 3000);
 
     expect(Array.from(segundo)).toEqual(Array.from(primeiro));
   });
 
   it("dispara o pulso quando a rajada chega, depois de o piso se estabilizar", () => {
     const dados = audioComUmaRajada(4000);
-    const envelope = construirEnvelopeDeBatida(dados, FPS, 4000);
+    const { pulso: envelope } = construirAnalise(dados, FPS, 4000);
 
     // A rajada começa em 2000ms = quadro 60. O piso de ruído já está estável
     // bem antes disso (quadro 30) e ainda não disparou nada.
@@ -81,7 +81,7 @@ describe("construirEnvelopeDeBatida", () => {
 
   it("o pulso decai depois da rajada — não fica ligado para sempre", () => {
     const dados = audioComUmaRajada(4000);
-    const envelope = construirEnvelopeDeBatida(dados, FPS, 4000);
+    const { pulso: envelope } = construirAnalise(dados, FPS, 4000);
 
     const noAtaque = envelope[60];
     const dezQuadrosDepois = envelope[70];
@@ -91,7 +91,7 @@ describe("construirEnvelopeDeBatida", () => {
 
   it("nunca sai da faixa 0..1 — é o que os modos de movimento assumem", () => {
     const dados = audioComUmaRajada(3000);
-    const envelope = construirEnvelopeDeBatida(dados, FPS, 3000);
+    const { pulso: envelope } = construirAnalise(dados, FPS, 3000);
 
     for (const valor of envelope) {
       expect(valor).toBeGreaterThanOrEqual(0);
