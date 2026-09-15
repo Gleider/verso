@@ -64,7 +64,7 @@ packages/lyrics      Agrupamento em versos, silabificação, saneamento, timing,
 worker traduzem protocolo; quem decide é `packages/`.
 
 No frontend, o equivalente é em dois lugares: **`apps/web/lib/*.ts`**
-(`sync`, `syllables`, `normalize`, `beat`, `effects`) e **`apps/web/composition/*.ts`**
+(`syllables`, `normalize`, `beat`) e **`apps/web/composition/*.ts`**
 (tudo que a composição de vídeo decide — settings, formato, movimento,
 textura). Componentes React e os `.tsx` de `composition/` apenas aplicam o
 que essas funções devolvem.

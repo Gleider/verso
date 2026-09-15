@@ -42,8 +42,8 @@ diferentes de quem lê.
 ## Testes
 
 **TDD para lógica pura.** Escreva o teste antes em: `lyrics` (versos, sílabas,
-saneamento, diff de timing), `lib/sync.ts`, `lib/beat.ts`, `lib/effects.ts`,
-`lib/normalize.ts`.
+saneamento, diff de timing), `lib/beat.ts`, `lib/normalize.ts`,
+`lib/syllables.ts` e todo `.ts` de `composition/`.
 
 Nomes de teste descrevem **comportamento**, não implementação:
 
@@ -57,8 +57,14 @@ ordem, fim antes do começo, verso sem timing.
 
 Quando um defeito escapar, **escreva o teste que o impediria** antes de
 corrigir. Vários testes deste projeto existem por isso — por exemplo, o que
-garante que a amplitude do efeito é grande o bastante para ser vista, e o que
-fixa que a centralização não pode depender do tamanho da lista.
+garante que a amplitude do movimento é grande o bastante para ser vista e o que
+fixa que o fundo nunca descobre a borda da imagem, os dois em
+`composition/__tests__/ambiente.test.ts`.
+
+**E quando o código migrar, a trava migra junto.** Apagar um módulo cujo
+comportamento foi para outro lugar leva os testes dele embora sem avisar: o que
+some não é o teste, é a garantia. Foi o que quase aconteceu com a amplitude
+mínima do `pitfalls.md` §12, que morava nos testes do player antigo.
 
 **Fixtures nunca usam letras reais.** Todo texto de exemplo é inventado para o
 teste, ou vocabulário comum escolhido pelo padrão silábico (`casa`, `cachorro`,

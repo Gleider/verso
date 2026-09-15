@@ -1,10 +1,20 @@
 /**
- * Imagem de fundo viva.
+ * Detecção de batida.
  *
- * Dois movimentos somados: uma respiração lenta e contínua, que dá vida mesmo
- * num trecho instrumental, e um micro-pulso na batida, que amarra a imagem à
- * música. As amplitudes são pequenas de propósito — o efeito deve ser sentido,
- * não notado, e a foto do usuário não pode virar outra coisa.
+ * Recorrência com estado: cada quadro depende do anterior. Quem constrói o
+ * envelope inteiro, sempre do quadro 0 e em ordem, é
+ * `composition/audio/envelope.ts` — o Remotion renderiza quadros fora de ordem
+ * e em paralelo, e chamar isto direto num quadro qualquer daria outro valor
+ * (`pitfalls.md` §17).
+ *
+ * As constantes abaixo estão calibradas para a escala de decibéis do
+ * `AnalyserNode`. A tradução da magnitude linear do Remotion para essa escala
+ * é feita antes, em `composition/audio/bandas.ts` — mudar os números daqui sem
+ * mexer lá dessincroniza o pulso do vídeo exportado.
+ *
+ * O movimento contínuo da imagem morava aqui junto (`ambientScale`,
+ * `ambientDrift`, `visualState`, do player anterior ao editor de vídeo) e hoje
+ * vive em `composition/ambiente.ts`, que é quem o preview e o MP4 usam.
  */
 
 export interface BeatState {
@@ -24,32 +34,6 @@ const THRESHOLD = 1.35;
 const MIN_ENERGY = 0.06;
 /** Queda do pulso a cada quadro, para a batida "soltar" sozinha. */
 const DECAY = 0.86;
-
-/**
- * Respiração ambiente.
- *
- * O zoom nunca cai abaixo de AMBIENT_BASE: o deslocamento lateral precisa de
- * margem para não revelar a borda da imagem.
- */
-const AMBIENT_PERIOD_MS = 18_000;
-const AMBIENT_BASE = 1.05;
-const AMBIENT_AMPLITUDE = 0.12;
-
-/**
- * Deslocamento lento, em porcentagem do quadro.
- *
- * Os dois eixos usam períodos diferentes de propósito: com períodos iguais o
- * movimento vira uma diagonal óbvia; diferentes, ele parece orgânico.
- */
-const DRIFT_X = 1.8;
-const DRIFT_Y = 1.2;
-const DRIFT_PERIOD_X_MS = 23_000;
-const DRIFT_PERIOD_Y_MS = 31_000;
-
-/** O quanto a batida mexe em cada propriedade. */
-const PULSE_SCALE = 0.035;
-const PULSE_BRIGHTNESS = 0.18;
-const PULSE_SATURATE = 0.22;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -72,40 +56,4 @@ export function stepBeat(state: BeatState, energy: number): BeatState {
   }
 
   return { average, pulse: clamp(pulse, 0, 1) };
-}
-
-/** Respiração lenta da imagem, independente da música. */
-export function ambientScale(elapsedMs: number): number {
-  const phase = (2 * Math.PI * elapsedMs) / AMBIENT_PERIOD_MS;
-  return AMBIENT_BASE + (AMBIENT_AMPLITUDE * (1 - Math.cos(phase))) / 2;
-}
-
-/** Deslocamento lento da imagem, em porcentagem do quadro. */
-export function ambientDrift(elapsedMs: number): { x: number; y: number } {
-  return {
-    x: DRIFT_X * Math.sin((2 * Math.PI * elapsedMs) / DRIFT_PERIOD_X_MS),
-    y: DRIFT_Y * Math.sin((2 * Math.PI * elapsedMs) / DRIFT_PERIOD_Y_MS),
-  };
-}
-
-export interface VisualState {
-  scale: number;
-  brightness: number;
-  saturate: number;
-  /** Deslocamento em porcentagem do quadro. */
-  x: number;
-  y: number;
-}
-
-/** O estado visual da imagem num instante: respiração somada à batida. */
-export function visualState(elapsedMs: number, pulse: number): VisualState {
-  const eased = clamp(pulse, 0, 1);
-  const drift = ambientDrift(elapsedMs);
-  return {
-    scale: ambientScale(elapsedMs) + eased * PULSE_SCALE,
-    brightness: 1 + eased * PULSE_BRIGHTNESS,
-    saturate: 1 + eased * PULSE_SATURATE,
-    x: drift.x,
-    y: drift.y,
-  };
 }

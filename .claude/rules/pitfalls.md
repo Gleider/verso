@@ -48,13 +48,16 @@ Mac não. Essa diferença já levou a conclusões erradas aqui.
 **Causa:** o ffmpeg do Homebrew nesta máquina traz apenas `libx264`. **Não tem
 `libass` nem `drawtext`** — nenhum filtro de legenda ou de texto existe.
 
-**Consequência de projeto:** o karaokê do vídeo **não** é legenda. O texto é
-desenhado com Pillow em `packages/video/frames.py` e entregue ao ffmpeg como
-quadros crus por um cano; o ffmpeg compõe com `overlay`.
+**Consequência de projeto:** o karaokê do vídeo **não** é legenda. Quem desenha
+o texto é a composição Remotion de `apps/web/composition/`, num Chromium
+headless; o ffmpeg só codifica o que sai dele. (Até o editor de vídeo integrado
+o desenho era Pillow em `packages/video/frames.py`, com os quadros crus indo ao
+ffmpeg por um cano — esse pacote não existe mais.)
 
 Não troque isso por ASS/SRT sem antes verificar `ffmpeg -filters`. O caminho
-atual tem uma vantagem real: o vídeo usa a mesma silabificação e as mesmas cores
-do player, em vez de uma aproximação feita por outro motor.
+atual tem uma vantagem maior ainda desde o editor: o vídeo não usa a mesma
+silabificação e as mesmas cores do player — ele **é** o player, o mesmo
+componente React desenhando os dois.
 
 **Filtros que esta build tem** e que o efeito VHS usa: `rgbashift`, `noise`,
 `geq`, `eq`, `vignette`, `zoompan`, `overlay`.
@@ -124,9 +127,14 @@ foi extraído e **olhado**.
 em vez da altura do **viewport**. Metade disso é um deslocamento enorme que joga
 tudo para fora da tela.
 
-**Correção:** `centerOffset` em `apps/web/lib/sync.ts`, que recebe a altura da
-área visível. Há um teste fixando a regra: o resultado **não pode depender de
-quantos versos a lista tem**.
+**Correção:** `centerOffset`, que recebia a altura da área visível, com um teste
+fixando a regra: o resultado **não pode depender de quantos versos a lista tem**.
+
+**Estado atual:** o player virou a composição Remotion, que centraliza o verso
+ativo dentro do quadro do vídeo — `apps/web/lib/sync.ts` foi apagado junto com o
+player antigo. A armadilha fica registrada porque a régua continua valendo em
+qualquer centralização futura: a medida de referência é sempre a **área
+visível**, nunca o tamanho do conteúdo.
 
 ## 9. Adicionar valor a um enum do Postgres
 
@@ -174,7 +182,7 @@ vez de só matar.
 **Causa:** nome de arquivo é palpite. Arquivos exportados por outros programas
 ou baixados da web chegam sem extensão; no Mac, fotos são `.heic` por padrão.
 
-**Correção:** `verso_video.images.prepare_background` valida **abrindo** o
+**Correção:** `verso_core.images.prepare_background` valida **abrindo** o
 arquivo com Pillow, normaliza (máx. 2560 px), respeita a orientação EXIF e
 grava em formato único. O limite é 40 MB — foto de câmera passa de 10 MB com
 facilidade.

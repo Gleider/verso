@@ -9,11 +9,19 @@
 dentro de um router, ela está no lugar errado.
 
 No frontend a regra tem um espelho, e agora com **dois** lugares de lógica
-pura: **`apps/web/lib/*.ts`** (sincronia, sílabas, saneamento, batida, efeito
-ambiente) e **`apps/web/composition/*.ts`** (tudo que a composição de vídeo
-decide — settings, formato, movimento, textura). Componentes React e
-componentes `.tsx` de `composition/` só aplicam o que essas funções devolvem.
-Se algo está calculando, esse cálculo pertence a um `.ts`.
+pura: **`apps/web/lib/*.ts`** (sílabas, saneamento, detecção de batida) e
+**`apps/web/composition/*.ts`** (tudo que a composição de vídeo decide —
+settings, formato, movimento, textura). Componentes React e componentes `.tsx`
+de `composition/` só aplicam o que essas funções devolvem. Se algo está
+calculando, esse cálculo pertence a um `.ts`.
+
+O que sobrou em `lib/` é pouco de propósito: `sync.ts` (sincronia do player
+antigo) e `effects.ts` (o VHS/respiração de CSS) foram apagados quando o editor
+de vídeo passou a ser a única definição do vídeo, e o que eles faziam vive hoje
+em `composition/versos.ts`, `composition/preenchimento.ts`,
+`composition/ambiente.ts` e `composition/efeitos/`. Os três módulos restantes são
+**importados só pela composição** — se um dia mais um deles perder o último
+consumidor de fora, o lugar dele é dentro de `composition/`.
 
 Essa separação é o que permite testar o coração do produto sem banco, sem
 navegador e sem áudio — e, desde o editor de vídeo, sem Chromium também.
