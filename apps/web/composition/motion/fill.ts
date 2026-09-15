@@ -1,13 +1,18 @@
-import { derivaFlutuante, preenchimentoPadrao, VERSO_PARADO } from "./comum";
+import { derivaFlutuante, envelope, preenchimentoPadrao } from "./comum";
 import type { EntradaDeSegmento, EntradaDeVerso, EstiloDeSegmento, EstiloDeVerso, ModoDeMovimento } from "./tipos";
 
-/** O karaokê de hoje: a cor avança dentro do verso, sem mexer na geometria. */
+/** O karaokê clássico: a cor avança dentro do verso, sem mexer na geometria. */
 export const fill: ModoDeMovimento = {
   id: "fill",
   rotulo: "Preenchimento",
 
   verso(entrada: EntradaDeVerso): EstiloDeVerso {
-    return { ...VERSO_PARADO, transform: derivaFlutuante(entrada) };
+    return {
+      opacity: envelope(entrada),
+      transform: derivaFlutuante(entrada),
+      clipPath: null,
+      recorta: false,
+    };
   },
 
   segmento(entrada: EntradaDeSegmento): EstiloDeSegmento {

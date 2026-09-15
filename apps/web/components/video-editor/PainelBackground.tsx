@@ -1,16 +1,21 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { ArrowUpTrayIcon } from "@heroicons/react/24/outline";
+import { BIBLIOTECA } from "@/composition/efeitos/fundos";
 import { api } from "@/lib/api";
-import type { AspectRatio, Resolucao } from "@/composition/settings";
+import type { AmbientId, AspectRatio, Resolucao } from "@/composition/settings";
 import type { VideoSettings } from "@/lib/types";
 import { BotaoDeGrupo } from "./BotaoDeGrupo";
+import { comoPorcento, Deslizador, Secao } from "./Controles";
 
-const AMBIENTES: { id: VideoSettings["background"]["ambient"]; rotulo: string }[] = [
-  { id: "breathe", rotulo: "Respiração" },
-  { id: "pulse", rotulo: "Pulso" },
-  { id: "drift", rotulo: "Deriva" },
-  { id: "none", rotulo: "Nenhum" },
+const AMBIENTES: { id: AmbientId; rotulo: string; dica: string }[] = [
+  { id: "breathe", rotulo: "Respiração", dica: "escala lenta com deriva suave" },
+  { id: "pulse", rotulo: "Pulso", dica: "a imagem bate junto com o grave" },
+  { id: "drift", rotulo: "Deriva", dica: "panorâmica larga atravessando o quadro" },
+  { id: "sway", rotulo: "Balanço", dica: "rotação lenta, como câmera na mão" },
+  { id: "zoom", rotulo: "Zoom", dica: "aproxima e afasta num ciclo longo" },
+  { id: "none", rotulo: "Nenhum", dica: "parado — só a batida ainda empurra" },
 ];
 
 const PROPORCOES: { id: AspectRatio; rotulo: string }[] = [
@@ -31,7 +36,7 @@ interface Props {
   onBackgroundUploaded: () => void;
 }
 
-/** Aba Background: origem da imagem, movimento ambiente e legibilidade do texto. */
+/** Aba Background: origem da imagem, movimento, gradação de cor e legibilidade. */
 export function PainelBackground({
   trackId,
   settings,
@@ -43,6 +48,7 @@ export function PainelBackground({
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const { background } = settings;
+  const dicaDoAmbiente = AMBIENTES.find((a) => a.id === background.ambient)?.dica;
 
   function atualizar(parcial: Partial<VideoSettings["background"]>) {
     onChange({ ...settings, background: { ...background, ...parcial } });
@@ -68,10 +74,7 @@ export function PainelBackground({
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-2">
-        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-3">
-          formato
-        </span>
+      <Secao titulo="formato">
         <div className="flex flex-wrap gap-2">
           {PROPORCOES.map((p) => (
             <BotaoDeGrupo
@@ -94,32 +97,29 @@ export function PainelBackground({
             </BotaoDeGrupo>
           ))}
         </div>
-      </section>
+      </Secao>
 
-      <section className="flex flex-col gap-2">
-        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-3">
-          origem
-        </span>
+      <Secao titulo="origem">
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={enviando}
-            className="border border-line px-3 py-1.5 font-mono text-xs text-ink-2 transition-colors hover:border-amber hover:text-amber disabled:opacity-40"
+            title="Envia uma imagem sua para o fundo do vídeo (até 40 MB)"
+            className="flex items-center gap-1.5 border border-line px-3 py-1.5 font-mono text-xs text-ink-2 transition-colors hover:border-amber hover:text-amber disabled:opacity-40"
           >
-            {enviando ? "enviando…" : hasBackground ? "trocar envio" : "enviar imagem"}
+            <ArrowUpTrayIcon className="h-4 w-4" aria-hidden="true" />
+            {enviando ? "enviando…" : hasBackground ? "trocar imagem" : "carregar imagem"}
           </button>
-          <button
-            type="button"
-            onClick={() => atualizar({ kind: "color" })}
-            className={`border px-3 py-1.5 font-mono text-xs transition-colors ${
-              background.kind === "color"
-                ? "border-amber text-amber"
-                : "border-line text-ink-2 hover:border-amber hover:text-amber"
-            }`}
+          <BotaoDeGrupo ativo={background.kind === "color"} onClick={() => atualizar({ kind: "color" })}>
+            cor sólida
+          </BotaoDeGrupo>
+          <BotaoDeGrupo
+            ativo={background.kind === "library"}
+            onClick={() => atualizar({ kind: "library", ref: background.ref ?? BIBLIOTECA[0].id })}
           >
-            sem imagem (cor sólida)
-          </button>
+            biblioteca
+          </BotaoDeGrupo>
         </div>
         <input
           ref={inputRef}
@@ -140,73 +140,128 @@ export function PainelBackground({
             className="h-9 w-16 border border-line bg-surface"
           />
         )}
+        {background.kind === "library" && (
+          <div className="grid grid-cols-4 gap-2">
+            {BIBLIOTECA.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => atualizar({ ref: f.id })}
+                title={f.rotulo}
+                className={`flex flex-col gap-1 border p-1 transition-colors ${
+                  background.ref === f.id ? "border-amber" : "border-line hover:border-amber"
+                }`}
+              >
+                <span
+                  className="block h-10 w-full"
+                  style={{ background: f.amostra, backgroundColor: f.base }}
+                />
+                <span className="font-mono text-[10px] text-ink-3">{f.rotulo}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {erro && (
           <p role="alert" className="text-sm text-risk">
             {erro}
           </p>
         )}
-      </section>
+      </Secao>
 
-      <section className="flex flex-col gap-2">
-        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-3">
-          movimento ambiente
-        </span>
+      <Secao titulo="movimento">
         <div className="flex flex-wrap gap-2">
           {AMBIENTES.map((a) => (
-            <button
+            <BotaoDeGrupo
               key={a.id}
-              type="button"
+              ativo={background.ambient === a.id}
               onClick={() => atualizar({ ambient: a.id })}
-              className={`border px-3 py-1.5 font-mono text-xs transition-colors ${
-                background.ambient === a.id
-                  ? "border-amber text-amber"
-                  : "border-line text-ink-2 hover:border-amber hover:text-amber"
-              }`}
+              dica={a.dica}
             >
               {a.rotulo}
-            </button>
+            </BotaoDeGrupo>
           ))}
         </div>
-        <label className="flex flex-col gap-1 text-xs text-ink-2">
-          intensidade — {Math.round(background.ambientIntensity * 100)}%
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={background.ambientIntensity}
-            onChange={(e) => atualizar({ ambientIntensity: Number(e.target.value) })}
-          />
-        </label>
-      </section>
+        {dicaDoAmbiente && <span className="text-[11px] text-ink-3">{dicaDoAmbiente}</span>}
+        <Deslizador
+          rotulo="intensidade do movimento"
+          valor={background.ambientIntensity}
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(ambientIntensity) => atualizar({ ambientIntensity })}
+          formatar={comoPorcento}
+        />
+        <Deslizador
+          rotulo="reação à batida"
+          valor={background.reacaoBatida}
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(reacaoBatida) => atualizar({ reacaoBatida })}
+          formatar={comoPorcento}
+          dica="Quanto o grave da música empurra a imagem."
+        />
+      </Secao>
 
-      <section className="flex flex-col gap-2">
-        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-3">
-          legibilidade
-        </span>
-        <label className="flex flex-col gap-1 text-xs text-ink-2">
-          desfoque — {background.blur}px
-          <input
-            type="range"
-            min={0}
-            max={40}
-            step={1}
-            value={background.blur}
-            onChange={(e) => atualizar({ blur: Number(e.target.value) })}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-ink-2">
-          escurecimento — {Math.round(background.darken * 100)}%
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={background.darken}
-            onChange={(e) => atualizar({ darken: Number(e.target.value) })}
-          />
-        </label>
-      </section>
+      <Secao titulo="cor">
+        <Deslizador
+          rotulo="saturação"
+          valor={background.saturacao}
+          min={0}
+          max={2.5}
+          step={0.05}
+          onChange={(saturacao) => atualizar({ saturacao })}
+          formatar={comoPorcento}
+        />
+        <Deslizador
+          rotulo="contraste"
+          valor={background.contraste}
+          min={0.4}
+          max={2.2}
+          step={0.05}
+          onChange={(contraste) => atualizar({ contraste })}
+          formatar={comoPorcento}
+        />
+        <Deslizador
+          rotulo="brilho"
+          valor={background.brilho}
+          min={0.3}
+          max={2}
+          step={0.05}
+          onChange={(brilho) => atualizar({ brilho })}
+          formatar={comoPorcento}
+        />
+        <Deslizador
+          rotulo="matiz"
+          valor={background.matiz}
+          min={-180}
+          max={180}
+          step={1}
+          onChange={(matiz) => atualizar({ matiz })}
+          formatar={(v) => `${Math.round(v)}°`}
+        />
+      </Secao>
+
+      <Secao titulo="legibilidade">
+        <Deslizador
+          rotulo="desfoque"
+          valor={background.blur}
+          min={0}
+          max={40}
+          step={1}
+          onChange={(blur) => atualizar({ blur })}
+          formatar={(v) => `${v}px`}
+        />
+        <Deslizador
+          rotulo="escurecimento"
+          valor={background.darken}
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(darken) => atualizar({ darken })}
+          formatar={comoPorcento}
+        />
+      </Secao>
     </div>
   );
 }

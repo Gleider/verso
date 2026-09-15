@@ -43,9 +43,14 @@ export function segmentosNaGranularidade(
   verso: VersoPreparado,
   granularidade: "line" | "word" | "syllable",
 ): SegmentoPreparado[] {
-  if (granularidade === "syllable") return verso.segmentos;
-  if (granularidade === "word") return verso.palavras;
-  return [{ texto: verso.texto, s: verso.inicioMs, e: verso.fimMs }];
+  const versoInteiro = [{ texto: verso.texto, s: verso.inicioMs, e: verso.fimMs }];
+  if (granularidade === "line") return versoInteiro;
+
+  const escolhidos = granularidade === "syllable" ? verso.segmentos : verso.palavras;
+  // Letra importada de .lrc ou do Musixmatch tem tempo por VERSO, não por
+  // palavra — `segmentos` e `palavras` saem vazios. Sem esta volta ao verso
+  // inteiro, escolher "palavra" ou "sílaba" fazia a letra sumir da tela.
+  return escolhidos.length > 0 ? escolhidos : versoInteiro;
 }
 
 /**

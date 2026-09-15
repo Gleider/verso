@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from verso_core.models import JobKind, JobState, LyricsSource, TrackState
 
@@ -184,39 +184,103 @@ class BackgroundSettings(BaseModel):
     kind: Literal["upload", "library", "cover", "color"] = "color"
     ref: str | None = None
     color: str = "#0c1316"
-    ambient: Literal["breathe", "pulse", "drift", "none"] = "breathe"
+    ambient: Literal["breathe", "pulse", "drift", "sway", "zoom", "none"] = "breathe"
     ambientIntensity: float = Field(default=0.55, ge=0.0, le=1.0)
     blur: float = Field(default=0.0, ge=0.0, le=40.0)
     darken: float = Field(default=0.35, ge=0.0, le=1.0)
+    saturacao: float = Field(default=1.0, ge=0.0, le=3.0)
+    contraste: float = Field(default=1.0, ge=0.0, le=3.0)
+    brilho: float = Field(default=1.0, ge=0.0, le=3.0)
+    matiz: float = Field(default=0.0, ge=-180.0, le=180.0)
+    reacaoBatida: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
 class FontSettings(BaseModel):
-    family: Literal["bricolage", "source-serif", "jetbrains"] = "bricolage"
+    family: Literal[
+        "bricolage",
+        "source-serif",
+        "jetbrains",
+        "anton",
+        "archivo-black",
+        "bebas",
+        "playfair",
+        "space-grotesk",
+    ] = "bricolage"
     size: Literal["small", "medium", "large"] = "medium"
+    escala: float = Field(default=1.0, ge=0.5, le=2.0)
     weight: int = Field(default=800, ge=100, le=900)
-    alignH: Literal["left", "center", "right", "justify"] = "center"
-    alignV: Literal["top", "middle", "bottom"] = "middle"
+    alignH: Literal["left", "center", "right"] = "center"
     uppercase: bool = False
-    lineHeight: float = Field(default=1.25, ge=0.8, le=2.5)
+    lineHeight: float = Field(default=1.2, ge=0.8, le=2.5)
+    espacamento: float = Field(default=0.0, ge=-20.0, le=60.0)
+    sombra: float = Field(default=0.4, ge=0.0, le=1.0)
+    contorno: float = Field(default=0.0, ge=0.0, le=1.0)
+    brilho: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
 class MotionSettings(BaseModel):
     animation: Literal[
         "fill", "fade", "slide", "wipe", "popup", "scaling", "mask", "bubbling", "static"
     ] = "fill"
-    tweak: Literal["none", "floating"] = "none"
-    sync: Literal["line", "word", "syllable"] = "syllable"
-    durationMs: int = Field(default=420, ge=0, le=4000)
+    tweak: Literal["none", "floating"] = "floating"
+    sync: Literal["line", "word", "syllable"] = "line"
+    durationMs: int = Field(default=600, ge=0, le=4000)
+    intensidade: float = Field(default=0.6, ge=0.0, le=1.0)
+    saida: bool = True
 
 
 class StructureSettings(BaseModel):
     lyricsPosition: Literal["top", "center", "bottom"] = "center"
+    #: Quantos versos aparecem de cada lado do atual. Substituiu o antigo
+    #: `mostrarVizinhos` (booleano).
+    vizinhos: int = Field(default=0, ge=0, le=3)
+    opacidadeVizinhos: float = Field(default=0.35, ge=0.0, le=1.0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _converter_mostrar_vizinhos(cls, dados: object) -> object:
+        """Traz o formato antigo para o novo.
+
+        A conversão precisa acontecer AQUI, e não no `normalizarSettings` do
+        TypeScript: o Pydantic descarta campo desconhecido ao validar o JSONB,
+        então `mostrarVizinhos` já teria sumido antes de o navegador ver o
+        projeto — e o ajuste voltaria ao padrão sem nenhum aviso.
+        """
+        if not isinstance(dados, dict) or "vizinhos" in dados:
+            return dados
+        antigo = dados.get("mostrarVizinhos")
+        if antigo is None:
+            return dados
+        return {**dados, "vizinhos": 1 if antigo else 0}
 
 
 class StyleSettings(BaseModel):
     palette: str = "estudio"
+    #: Seleção livre de cor. `None` usa a paleta.
+    corCantada: str | None = None
+    corPorCantar: str | None = None
+    #: Os nove primeiros são os ids históricos, agora implementados como
+    #: shader GLSL (`@remotion/effects`); os demais só existiram depois disso.
     texture: Literal[
-        "none", "grain", "vhs", "paper", "sepia", "dust", "halftone", "vignette"
+        "none",
+        "grain",
+        "vhs",
+        "paper",
+        "sepia",
+        "dust",
+        "halftone",
+        "vignette",
+        "bloom",
+        "cromatico",
+        "crt",
+        "zoomblur",
+        "pixelate",
+        "thermal",
+        "lightleak",
+        "emboss",
+        "contour",
+        "tvoff",
+        "monocromatico",
     ] = "none"
     textureIntensity: float = Field(default=0.5, ge=0.0, le=1.0)
     overlay: Literal["none", "scrim-bottom", "scrim-full", "vignette"] = "none"
@@ -226,6 +290,12 @@ class OutputSettings(BaseModel):
     aspectRatio: Literal["16:9", "9:16"] = "16:9"
     resolution: Literal["720p", "1080p"] = "1080p"
     fps: int = Field(default=30, ge=1, le=60)
+
+
+#: Espelha `SETTINGS_VERSION` de `composition/settings.ts`. Sobe quando o
+#: formato muda; a leitura continua tolerante (campo que falta vira padrão dos
+#: dois lados), então isto é diagnóstico, não porta de migração.
+VERSAO_DO_FORMATO = 3
 
 
 class VideoSettings(BaseModel):

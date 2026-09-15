@@ -57,8 +57,10 @@ export default async function PlayPage({ params }: { params: Promise<{ id: strin
 
   const semTiming = lines.filter((line) => line.start_ms === null).length;
   const settings = normalizarSettings(project?.settings);
-  const backgroundUrl =
-    settings.background.kind === "color" ? null : api.backgroundUrl(track.id, 1);
+  // Só `upload` e `cover` têm arquivo: `library` é desenhada por CSS e `color`
+  // é cor sólida — pedir a imagem nesses casos dava 404.
+  const usaArquivo = settings.background.kind === "upload" || settings.background.kind === "cover";
+  const backgroundUrl = usaArquivo ? api.backgroundUrl(track.id, 1) : null;
 
   return (
     <>

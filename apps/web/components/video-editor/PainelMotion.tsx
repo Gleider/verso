@@ -4,26 +4,63 @@ import { MODOS } from "@/composition/motion";
 import type { SyncId, TweakId } from "@/composition/settings";
 import type { VideoSettings } from "@/lib/types";
 import { BotaoDeGrupo } from "./BotaoDeGrupo";
+import { comoPorcento, Deslizador, Interruptor, Secao } from "./Controles";
 
 interface Props {
   settings: VideoSettings;
   onChange: (settings: VideoSettings) => void;
+  /** Falso quando a letra veio com tempo por verso (.lrc, Musixmatch). */
+  temTimingPorPalavra: boolean;
 }
 
-const TWEAKS: { id: TweakId; rotulo: string }[] = [
-  { id: "none", rotulo: "Nenhum" },
-  { id: "floating", rotulo: "Flutuante" },
+const TWEAKS: { id: TweakId; rotulo: string; dica: string }[] = [
+  { id: "floating", rotulo: "Flutuante", dica: "O verso deriva devagar, com fase própria" },
+  { id: "none", rotulo: "Nenhum", dica: "O verso fica parado depois de entrar" },
 ];
 
-const SINCRONIAS: { id: SyncId; rotulo: string }[] = [
-  { id: "line", rotulo: "Linha" },
-  { id: "word", rotulo: "Palavra" },
-  { id: "syllable", rotulo: "Sílaba" },
+/**
+ * O que cada modo faz, em uma linha.
+ *
+ * Mora aqui e não em `composition/motion/*`: é texto de interface. O rótulo
+ * curto ("Salto", "Recorte", "Varredura") não diz o que vai acontecer na tela.
+ */
+const DICAS_DE_ANIMACAO: Record<string, string> = {
+  fill: "Karaokê clássico: a cor avança dentro do verso, sem mexer na geometria",
+  fade: "O verso aparece e some por opacidade, com uma aproximação leve",
+  slide: "Entra deslizando de um lado e sai pelo outro",
+  wipe: "Uma máscara varre da esquerda e revela o verso",
+  popup: "Salta de escala, passa do ponto e assenta",
+  scaling: "Entra pequeno e continua crescendo enquanto está em cena",
+  mask: "A letra vira janela: o fundo aparece dentro do próprio texto",
+  bubbling: "Cada palavra flutua com fase própria; a cantada salta",
+  static: "Aparece e fica. Sem animação de entrada",
+};
+
+const SINCRONIAS: { id: SyncId; rotulo: string; dica: string; exigeTiming: boolean }[] = [
+  {
+    id: "line",
+    rotulo: "Linha",
+    dica: "O verso inteiro preenche de uma vez. Funciona com qualquer letra.",
+    exigeTiming: false,
+  },
+  {
+    id: "word",
+    rotulo: "Palavra",
+    dica: "Uma palavra por vez. Precisa de letra com tempo por palavra.",
+    exigeTiming: true,
+  },
+  {
+    id: "syllable",
+    rotulo: "Sílaba",
+    dica: "O destaque acompanha o canto. Precisa de letra com tempo por palavra.",
+    exigeTiming: true,
+  },
 ];
 
-/** Aba Motion: como o texto entra, sai e reage à batida. */
-export function PainelMotion({ settings, onChange }: Props) {
+/** Aba Motion: como o texto entra, sai e se move enquanto está em cena. */
+export function PainelMotion({ settings, onChange, temTimingPorPalavra }: Props) {
   const { motion } = settings;
+  const dicaDaSincronia = SINCRONIAS.find((s) => s.id === motion.sync)?.dica;
 
   function atualizar(parcial: Partial<VideoSettings["motion"]>) {
     onChange({ ...settings, motion: { ...motion, ...parcial } });
@@ -31,59 +68,83 @@ export function PainelMotion({ settings, onChange }: Props) {
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-2">
-        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-3">
-          animação
-        </span>
+      <Secao titulo="animação">
         <div className="grid grid-cols-2 gap-2">
           {Object.values(MODOS).map((modo) => (
             <BotaoDeGrupo
               key={modo.id}
               ativo={motion.animation === modo.id}
               onClick={() => atualizar({ animation: modo.id })}
+              dica={DICAS_DE_ANIMACAO[modo.id]}
             >
               {modo.rotulo}
             </BotaoDeGrupo>
           ))}
         </div>
-        <label className="flex flex-col gap-1 text-xs text-ink-2">
-          duração da entrada — {motion.durationMs}ms
-          <input
-            type="range"
-            min={0}
-            max={1200}
-            step={20}
-            value={motion.durationMs}
-            onChange={(e) => atualizar({ durationMs: Number(e.target.value) })}
-          />
-        </label>
-      </section>
+        <Deslizador
+          rotulo="intensidade"
+          valor={motion.intensidade}
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(intensidade) => atualizar({ intensidade })}
+          formatar={comoPorcento}
+          dica="Quanto o modo escolhido exagera. Nunca chega a zero."
+        />
+        <Deslizador
+          rotulo="duração da entrada"
+          valor={motion.durationMs}
+          min={80}
+          max={1600}
+          step={20}
+          onChange={(durationMs) => atualizar({ durationMs })}
+          formatar={(v) => `${v}ms`}
+        />
+        <Interruptor
+          rotulo="animar também a saída"
+          ligado={motion.saida}
+          onChange={(saida) => atualizar({ saida })}
+          dica="Desligado, o verso some de uma vez quando o próximo começa."
+        />
+      </Secao>
 
-      <section className="flex flex-col gap-2">
-        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-3">
-          ajuste contínuo
-        </span>
+      <Secao titulo="movimento contínuo">
         <div className="flex flex-wrap gap-2">
           {TWEAKS.map((t) => (
-            <BotaoDeGrupo key={t.id} ativo={motion.tweak === t.id} onClick={() => atualizar({ tweak: t.id })}>
+            <BotaoDeGrupo
+              key={t.id}
+              ativo={motion.tweak === t.id}
+              onClick={() => atualizar({ tweak: t.id })}
+              dica={t.dica}
+            >
               {t.rotulo}
             </BotaoDeGrupo>
           ))}
         </div>
-      </section>
+      </Secao>
 
-      <section className="flex flex-col gap-2">
-        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-3">
-          sincronia
-        </span>
+      <Secao titulo="sincronia do destaque">
         <div className="flex flex-wrap gap-2">
           {SINCRONIAS.map((s) => (
-            <BotaoDeGrupo key={s.id} ativo={motion.sync === s.id} onClick={() => atualizar({ sync: s.id })}>
+            <BotaoDeGrupo
+              key={s.id}
+              ativo={motion.sync === s.id}
+              onClick={() => atualizar({ sync: s.id })}
+              dica={s.dica}
+              desabilitado={s.exigeTiming && !temTimingPorPalavra}
+            >
               {s.rotulo}
             </BotaoDeGrupo>
           ))}
         </div>
-      </section>
+        {dicaDaSincronia && <span className="text-[11px] text-ink-3">{dicaDaSincronia}</span>}
+        {!temTimingPorPalavra && (
+          <span className="text-[11px] text-ink-3">
+            Esta letra tem tempo por verso, não por palavra — só a sincronia por linha se aplica.
+            Transcrever pela IA gera o tempo por palavra.
+          </span>
+        )}
+      </Secao>
     </div>
   );
 }

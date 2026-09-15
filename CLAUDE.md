@@ -51,6 +51,7 @@ apps/api             FastAPI: rotas, DTOs, SSE. Casca fina.
 apps/worker          ARQ: pipeline de transcrição e render de vídeo.
 apps/web             Next.js 15: biblioteca, editor de letra, editor de vídeo, player.
 apps/web/composition A definição do vídeo (Remotion) — preview E o MP4 exportado.
+apps/web/composition/efeitos  Os shaders GLSL: texturas, gradação de cor, fundos gerados.
 apps/web/renderer     Script Node (render.mjs) que grava o MP4.
 packages/core        Modelos SQLAlchemy, schemas Pydantic, config, storage, preparo de imagem.
 packages/audio       ffmpeg, metadados, Demucs.
@@ -90,6 +91,17 @@ lugar chamando `useAudioData`, lógica em `.ts` e componentes em `.tsx`. Ver
 6. **O pulso da batida nunca dispara no vídeo exportado se a escala do
    espectro estiver errada.** `AnalyserNode` (navegador) e `visualizeAudio`
    (Remotion) usam escalas diferentes — ver `pitfalls.md` §17.
+7. **Os efeitos de vídeo exigem `gl: "swangle"` no render.** São shaders GLSL,
+   e o Chromium headless sobe sem WebGL2. `angle` funciona na máquina com GPU
+   e **falha no contêiner** — mudança na camada de shaders só está pronta
+   depois de um render dentro do Docker (`pitfalls.md` §27).
+8. **CSS primeiro; shader só para o que amostra pixels.** Montar canvas custa
+   o quadro inteiro, a cada quadro, mesmo sem efeito nenhum — já derrubou o
+   preview para menos de 10 fps. Cor, grão, vinheta e poeira são `filter` e
+   camada de CSS (`pitfalls.md` §28).
+9. **Não edite arquivo deste repositório com `Get-Content`/`Set-Content`.** O
+   PowerShell 5.1 lê UTF-8 sem BOM como ANSI e destrói os acentos; num `.ps1`,
+   o travessão vira aspa e quebra o parser (`pitfalls.md` §30).
 
 Cada uma está explicada, com o sintoma que produz, em
 `.claude/rules/pitfalls.md`.

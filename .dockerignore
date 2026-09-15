@@ -11,6 +11,16 @@ apps/web/node_modules
 apps/web/.next
 apps/web/tsconfig.tsbuildinfo
 
+# O Chromium que o `ensureBrowser()` baixa na máquina de quem faz o build
+# (~270 MB). Nenhum Dockerfile o copia — todos usam COPY seletivo —, e o
+# BuildKit transfere contexto de forma incremental, então em build quente isto
+# custa quase nada. Está aqui por dois motivos menores e reais: numa build
+# fria ele seria transferido, e se um dia alguém escrever `COPY . .` seria o
+# defeito acima de novo — o binário aqui é da plataforma do HOST, e o
+# contêiner é Linux. Dentro da imagem, quem baixa o Chromium certo é o
+# `prewarm.mjs`, em `node_modules/.remotion/`.
+.remotion/
+
 .git
 .venv
 **/__pycache__

@@ -29,5 +29,10 @@ docs/specs/2026-09-14 integrated-video-editor/*
 # Cache de modelos ML (~3 GB)
 infra/models/
 
+# Chromium que o ensureBrowser() do Remotion baixa (~270 MB). Reconstruível:
+# o prewarm.mjs o baixa de novo. Sem esta linha, um `git add -A` tenta
+# comitar o navegador inteiro.
+.remotion/
+
 # Sistema
 .DS_Store

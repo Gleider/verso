@@ -4,7 +4,6 @@ import { carregarFontes } from "./fonts";
 import { DESIGN, escalaDeDesign } from "./formato";
 import { Fundo } from "./layers/Fundo";
 import { Letra } from "./layers/Letra";
-import { Textura } from "./layers/Textura";
 import { Veu } from "./layers/Veu";
 import { msDoQuadro } from "./tempo";
 import type { KaraokeProps } from "./props";
@@ -51,7 +50,6 @@ export function Karaoke({ settings, versos, audioUrl, backgroundUrl, duracaoMs }
         }}
       >
         <Fundo settings={settings} ms={ms} pulso={pulso} src={backgroundUrl} />
-        <Textura settings={settings} ms={ms} pulso={pulso} src={backgroundUrl} />
         <Veu overlay={settings.style.overlay} />
         <Letra settings={settings} versos={versos} ms={ms} pulso={pulso} backgroundUrl={backgroundUrl} />
       </div>

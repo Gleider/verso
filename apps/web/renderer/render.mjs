@@ -132,7 +132,19 @@ async function principal() {
     timeoutInMilliseconds: timeout,
     logLevel: "error",
     overwrite: true,
-    chromiumOptions: { headless: true },
+    // O backend de OpenGL não é opcional desde que a composição usa
+    // @remotion/effects: os efeitos são shaders GLSL e exigem um contexto
+    // WebGL2, que o Chromium headless não cria por padrão.
+    //
+    // O padrão é `swangle` (SwiftShader + ANGLE, rasterização por SOFTWARE)
+    // porque é o único que funciona onde este projeto realmente renderiza: o
+    // contêiner do worker não tem GPU, e lá o `angle` falha com "Failed to
+    // acquire WebGL2 context" — em máquina com GPU o mesmo `angle` funciona,
+    // que é como isso passa despercebido em desenvolvimento.
+    //
+    // `VERSO_RENDER_GL=angle` troca para o caminho por hardware em quem tem
+    // GPU e quer velocidade.
+    chromiumOptions: { headless: true, gl: process.env.VERSO_RENDER_GL || "swangle" },
     onDownload: (src) => {
       emitir({ tipo: "baixando", src });
       return undefined;

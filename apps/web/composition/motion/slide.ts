@@ -1,18 +1,30 @@
-import { combinarTransform, derivaFlutuante, preenchimentoPadrao, progressoDeEntrada } from "./comum";
+import {
+  amplitude,
+  combinarTransform,
+  derivaFlutuante,
+  progressoDeEntrada,
+  progressoDeSaida,
+  preenchimentoPadrao,
+} from "./comum";
 import type { EntradaDeSegmento, EntradaDeVerso, EstiloDeSegmento, EstiloDeVerso, ModoDeMovimento } from "./tipos";
 
-const DESLOCAMENTO_PX = 70;
+const DESLOCAMENTO_PX = 220;
 
-/** Entra deslizando lateralmente até o lugar. */
+/** Entra deslizando de um lado e sai pelo outro. */
 export const slide: ModoDeMovimento = {
   id: "slide",
   rotulo: "Deslizar",
 
   verso(entrada: EntradaDeVerso): EstiloDeVerso {
-    const p = progressoDeEntrada(entrada);
-    const x = (1 - p) * DESLOCAMENTO_PX;
+    const entrou = progressoDeEntrada(entrada);
+    const saindo = progressoDeSaida(entrada);
+    const amp = DESLOCAMENTO_PX * amplitude(entrada);
+
+    // Entra pela direita; ao sair, continua para a esquerda.
+    const x = (1 - entrou) * amp - (1 - saindo) * amp;
+
     return {
-      opacity: p,
+      opacity: Math.min(entrou, saindo),
       transform: combinarTransform(`translateX(${x.toFixed(2)}px)`, derivaFlutuante(entrada)),
       clipPath: null,
       recorta: false,

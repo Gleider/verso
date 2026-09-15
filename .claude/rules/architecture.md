@@ -109,6 +109,66 @@ componente React (`Karaoke.tsx`) desenha o preview do editor
 classe de defeito "ficou diferente no vídeo": não há duas implementações para
 divergirem.
 
+### CSS primeiro, shader só onde precisa
+
+`apps/web/composition/efeitos/` é onde mora tudo que é **pixel**, e ele é
+deliberadamente **híbrido**. A pergunta que decide de que lado uma coisa cai é
+sempre a mesma:
+
+> O efeito precisa **amostrar os pixels vizinhos**?
+
+- **Não** → CSS. Gradação de cor (`cor.ts`, um `filter`), e as texturas de
+  `texturas-css.ts` (grão, sépia, vinheta, poeira, preto e branco): um filtro
+  ou uma camada por cima. O navegador compõe na GPU **sem custo por quadro**.
+- **Sim** → shader. `texturas.ts` (retícula, VHS, tubo, cromático, estouro,
+  borrão radial, pixelado) e os fundos gerados de `fundos.ts`, desenhados pelo
+  GLSL de `composition/gl/`.
+
+`layers/Fundo.tsx` decide com `precisaDeGl()`: **sem shader, nenhum canvas é
+montado** — o fundo volta a ser um `<div>` ou um `<Img>`, e o preview fica em
+60 fps cravados.
+
+Isso não é preferência estética, é o custo do quadro, medido (`pitfalls.md`
+§28). Já houve uma rodada em que *tudo* virou shader, inclusive a gradação de
+cor: o preview caiu para menos de 10 fps, e o sépia ficou pior do que o
+`filter: sepia()` nativo que ele substituiu.
+
+O que o shader ganha de verdade é o que CSS não alcança: retícula que segue a
+imagem, aberração cromática, distorção de lente, borrão radial. Esses valem o
+canvas — e o painel marca quais são, para a conta ficar visível a quem escolhe.
+
+### Como a camada de shader é montada
+
+`composition/gl/` monta **um** fragment shader por combinação de fundo e
+efeito, num contexto WebGL2 próprio, desenhado **síncrono** no
+`useLayoutEffect`. Um efeito que amostra várias vezes (cromático, borrão
+radial, retícula) chama a função do fundo de novo, em vez de precisar do
+resultado numa textura intermediária.
+
+Era isso que faltava: `@remotion/effects` dava um canvas **por efeito**, e
+cada passe copiava 2 MP para o seguinte — medido em ~7 ms por passe, linear
+(`pitfalls.md` §28). Com sete passes o preview caía de 60 para 31 fps.
+
+Divisão dos arquivos, seguindo a regra de `.ts` puro e `.tsx` só aplicando:
+
+| arquivo | papel |
+|---|---|
+| `gl/glsl/*.ts` | o GLSL, em constantes de string (webpack do Remotion não tem loader de `.glsl`) |
+| `gl/fonte.ts` | monta o fonte da combinação; define quais fundos e efeitos existem |
+| `gl/programa.ts` | compila e cacheia por combinação — recompilar por quadro custaria dezenas de ms |
+| `gl/uniformes.ts` | `settings -> uniformes`, função pura e testável sem GPU |
+| `gl/contexto.ts` | o contexto, o `drawArrays` |
+| `layers/Tela.tsx` | o único `.tsx`: o canvas |
+
+Consequências operacionais que **falham em silêncio**: o render precisa de
+`gl: "swangle"` (`pitfalls.md` §27), o contexto precisa de
+`preserveDrawingBuffer: true` (senão o MP4 sai em branco e o preview não),
+e o hash de ruído dos exemplos da internet quebra em ANGLE (§29).
+
+As fotos da biblioteca (`public/fundos/`) são domínio público ou CC0, e só.
+Ver `public/fundos/CREDITOS.md`: atribuição de CC BY teria de viajar dentro de
+todo vídeo exportado, e não há onde colocá-la.
+
 ### Seis regras duras da composição
 
 Todo arquivo sob `composition/` e `renderer/` segue isto, porque quebrá-las

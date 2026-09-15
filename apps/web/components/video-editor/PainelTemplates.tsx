@@ -1,8 +1,10 @@
 "use client";
 
-import { TEMPLATES } from "@/composition/templates";
+import { fundoPorId } from "@/composition/efeitos/fundos";
 import { paletaPorId } from "@/composition/palettes";
+import { TEMPLATES } from "@/composition/templates";
 import type { VideoSettings } from "@/lib/types";
+import { Secao } from "./Controles";
 
 interface Props {
   currentSettings: VideoSettings;
@@ -17,37 +19,41 @@ interface Props {
  */
 export function PainelTemplates({ activeTemplateId, onApply }: Props) {
   return (
-    <div className="flex flex-col gap-3">
-      <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-3">
-        templates
-      </span>
+    <Secao titulo="templates">
       <div className="grid grid-cols-2 gap-2">
         {TEMPLATES.map((template) => {
           const paleta = paletaPorId(template.settings.style.palette);
+          const fundo = fundoPorId(template.settings.background.ref);
           const ativo = activeTemplateId === template.id;
           return (
             <button
               key={template.id}
               type="button"
               onClick={() => onApply(template.settings, template.id)}
-              className={`flex flex-col items-start gap-2 border p-3 text-left transition-colors ${
+              title={template.descricao}
+              className={`flex flex-col items-start gap-2 border p-2 text-left transition-colors ${
                 ativo ? "border-amber" : "border-line hover:border-amber"
               }`}
             >
               <span
-                className="h-10 w-full"
-                style={{
-                  background: `linear-gradient(135deg, ${template.settings.background.color}, ${paleta.sung})`,
-                }}
-              />
+                className="flex h-14 w-full items-center justify-center overflow-hidden"
+                style={{ background: fundo.amostra, backgroundColor: fundo.base }}
+              >
+                <span
+                  className="font-display text-base font-bold"
+                  style={{ color: paleta.sung }}
+                >
+                  Aa
+                </span>
+              </span>
               <span className="font-display text-sm text-ink">{template.rotulo}</span>
-              <span className="font-mono text-[10px] text-ink-3">
-                {template.settings.motion.animation} · {template.settings.style.texture}
+              <span className="font-mono text-[10px] leading-tight text-ink-3">
+                {template.descricao}
               </span>
             </button>
           );
         })}
       </div>
-    </div>
+    </Secao>
   );
 }

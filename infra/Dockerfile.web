@@ -22,6 +22,11 @@ ENV PORT=3000
 
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+# O standalone do Next NÃO leva `public/` junto — é responsabilidade do
+# Dockerfile. Sem esta linha os WOFF2 da composição dão 404 e TODA fonte cai
+# no fallback do sistema, calado: o vídeo sai com a fonte errada e o seletor de
+# família parece não fazer nada.
+COPY --from=builder /app/public ./public
 
 EXPOSE 3000
 CMD ["node", "server.js"]

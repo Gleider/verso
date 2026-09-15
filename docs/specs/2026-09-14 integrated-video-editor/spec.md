@@ -1,12 +1,47 @@
 # Editor de vídeo integrado
 
 **Data:** 2026-09-14 · **Estado:** implementado (etapas 0–7 do plano de
-implementação). Duas decisões da spec mudaram na execução: `lib/beat.ts` NÃO
-sobrevive intacto (§7 assumia isso incorretamente — a escala de
-`visualizeAudio` exigiu tradução própria, ver `pitfalls.md` §17), e o ajuste
-por verso (`nudge_ms`) não ganhou UI no player migrado (§9) — só o offset da
-faixa inteira.
+implementação), com uma segunda rodada de ajustes depois do primeiro uso real.
 **Referência visual:** os `.png` desta pasta (criação de vídeo do Musixmatch Pro)
+
+### Onde a execução divergiu da spec
+
+- **`lib/beat.ts` NÃO sobrevive intacto.** §7 assumia isso incorretamente: a
+  escala de `visualizeAudio` exigiu tradução própria (`pitfalls.md` §17).
+- **As texturas se dividiram em duas famílias, por desempenho.** §6.5 as
+  desenhava todas com gradiente e `mix-blend-mode`; na prática só `grain` e
+  `sepia` ficavam parecidas com o nome, porque CSS não amostra os pixels de
+  baixo. Hoje o critério é esse mesmo: **quem não amostra continua em CSS**
+  (grão, sépia, vinheta, poeira, preto e branco) e **quem amostra virou GLSL
+  próprio** em `composition/gl/` (retícula, VHS, tubo, cromático, estouro,
+  borrão radial, pixelado).
+
+  O caminho intermediário — `@remotion/effects` — foi tentado e **abandonado**:
+  ele dava um canvas por efeito, cada passe copiando 2 MP para o seguinte, a
+  ~7 ms por passe. Com sete passes o preview caía de 60 para 31 fps. Com um
+  shader só, todas as configurações voltaram a 60 fps e o render ficou 8×
+  mais barato. Ver `pitfalls.md` §28 e `architecture.md`.
+- **A biblioteca de fundos deixou de ser só procedural.** §6.1 argumentava
+  contra empacotar fotos; a restrição real era de **licença**, não de formato.
+  Há 9 fundos gerados em GLSL e 7 fotos de domínio público/CC0
+  (`public/fundos/CREDITOS.md`).
+- **A sincronia por palavra e por sílaba depende dos dados.** Letra vinda de
+  `.lrc` ou do Musixmatch tem tempo por verso; nesse caso o controle fica
+  desabilitado, em vez de oferecer uma opção que não muda nada.
+
+### O que a spec pede e ainda NÃO existe
+
+- **Capa embutida como fundo** (§6.1). `background.kind` já tem `"cover"`, mas
+  não há extração da arte das tags (o `mutagen` já está no caminho da
+  ingestão), nem endpoint, nem botão. É o item de maior retorno pelo tamanho:
+  um fundo de um clique, sem o usuário procurar imagem.
+- **Tela de entrada "template ou do zero"** (§5, `select-template.png`). Hoje
+  o editor abre direto, com os templates só na aba.
+- **Miniaturas de template por `renderStill()`** (§6.6). A aba mostra o fundo
+  real e o nome, não um quadro da composição — então um template com fonte ou
+  movimento marcante parece igual a outro com o mesmo fundo.
+- **Uma família cursiva** (§6.2). As oito famílias existem, mas o repertório
+  ficou sem a cursiva que a spec lista.
 
 Substitui o botão "gerar 1080p" por uma tela de edição onde o vídeo é montado
 olhando para ele, e não imaginando como vai ficar.

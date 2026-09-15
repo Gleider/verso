@@ -381,3 +381,163 @@ Ao terminar uma mudança que toca vários serviços, é mais seguro reconstruir
 todos (`up -d --build`, sem nomear serviço) do que confiar na memória de quais
 foram tocados. Rodar nativo (`make api`, `make worker`, `make web`) não tem
 esse problema — é uma razão a mais para preferir isso em desenvolvimento ativo.
+
+## 24. O standalone do Next não leva `public/` junto
+
+**Sintoma:** no Docker, **nenhuma** fonte da composição funciona. O seletor de
+família parece morto: as oito opções produzem o mesmo texto, porque as oito
+caem no fallback do sistema. Nativo (`make web`) está tudo certo.
+
+**Causa:** `output: "standalone"` monta `.next/standalone` com o servidor e as
+dependências, mas **não copia `public/`** — a documentação do Next diz que
+copiar é responsabilidade de quem escreve o Dockerfile. Os `.woff2` dão 404,
+`loadFont()` falha em silêncio e o Chromium desenha com a fonte genérica.
+
+**Correção:** `infra/Dockerfile.web` tem
+`COPY --from=builder /app/public ./public`. Vale para qualquer coisa servida de
+`public/`, não só fonte.
+
+## 25. Fonte variável declarada com um peso só trava a instância
+
+**Sintoma:** o controle de peso não faz nada. O arquivo é variável, o eixo
+existe, e mesmo assim 300 e 800 saem idênticos.
+
+**Causa:** `loadFont({weight: "400"})` descreve um `FontFace` de peso **fixo**.
+O Chromium instancia o eixo nesse valor e ignora o `font-weight` do CSS.
+
+**Correção:** declarar o intervalo — `weight: "200 800"` — para as famílias
+variáveis, e o peso real para as estáticas. `composition/fonts.ts` guarda
+`pesoMin`/`pesoMax` por família e `pesoSuportado()` limita o valor salvo ao
+eixo que a família tem; o painel desabilita o controle quando os dois são
+iguais, em vez de deixar um deslizador que não muda nada.
+
+## 26. `inline-block` descarta o espaço do fim de dentro dele
+
+**Sintoma:** com um modo de movimento que transforma cada segmento (o
+`bubbling`), as palavras do verso saem coladas: `ocachorroatravessou`. Com os
+outros modos, o mesmo verso sai certo.
+
+**Causa:** os segmentos carregam o espaço entre palavras no próprio texto
+(`versos.ts` anexa um espaço ao fim de cada palavra que não é a última). Um
+`<span>` só vira `inline-block` quando o modo tem `transform`, e um
+`inline-block` **colapsa o espaço final de dentro dele** — o espaço existe no
+DOM e não ocupa largura nenhuma.
+
+**Correção:** `whiteSpace: "pre-wrap"` no span, em `layers/Verso.tsx`.
+`pre-wrap`, não `pre`: preserva o espaço **e** mantém o ponto de quebra de
+linha, que `pre` mataria.
+
+Este defeito passa por qualquer teste: as funções puras devolvem o texto
+certo. Só apareceu quando um quadro foi extraído e **olhado** — é o terceiro
+caso deste arquivo com essa mesma moral (§7 e §12 são os outros).
+
+---
+
+As três próximas vieram de trocar as texturas de CSS para shaders GLSL
+(`@remotion/effects`).
+
+## 27. O render precisa de `swangle`, e `angle` engana quem tem GPU
+
+**Sintoma:** o render morre com
+`Failed to acquire WebGL2 context for canvas effect` — **só dentro do
+contêiner**. Na máquina de desenvolvimento, o mesmo código renderiza os
+efeitos perfeitamente.
+
+**Causa:** os efeitos de `@remotion/effects` são shaders GLSL e exigem um
+contexto WebGL2, que o Chromium headless não cria por padrão. Até aí, a
+correção óbvia é `chromiumOptions: {gl: "angle"}` — e ela **funciona no
+Windows com GPU**, porque lá o ANGLE encosta no D3D11. O contêiner do worker
+não tem GPU nenhuma, e o ANGLE não tem em que se apoiar.
+
+**Correção:** `gl: "swangle"` (SwiftShader + ANGLE, rasterização por
+**software**) é o padrão em `apps/web/renderer/render.mjs`. É o mesmo backend
+que o Remotion usa por padrão no Lambda, pelo mesmo motivo. `VERSO_RENDER_GL=angle`
+troca para o caminho por hardware em quem tem GPU e quer velocidade.
+
+**A armadilha dentro da armadilha:** `angle` passa em desenvolvimento e falha
+em produção. Todo ajuste na camada de shaders precisa de um render **dentro do
+contêiner** antes de ser dado como pronto — o teste local não cobre isto.
+
+O Chromium ainda avisa que "automatic fallback to software WebGL has been
+deprecated". É aviso, não erro: o render completa. A opção
+`--enable-unsafe-swiftshader` que ele sugere não é exposta pelo
+`chromiumOptions` do Remotion.
+
+## 28. O custo do efeito é por PASSE, e é linear
+
+**Sintoma:** o preview do editor, que corria solto, cai para 5–10 fps. O vídeo
+exportado sai certo; o render nem parece tão mais lento. Só a edição fica
+intragável.
+
+**Causa medida.** Não é orquestração — essa foi a primeira hipótese, e ela
+estava **errada**. Montar canvas custa praticamente zero. O que custa é cada
+passe: `@remotion/effects` dava um canvas POR EFEITO, em ping-pong, e cada
+passe fazia `texImage2D` do canvas anterior (cópia de 2 MP) mais um
+`drawImage` final para o canvas 2D de saída.
+
+Medido em 90 quadros, `concurrency: 1`, `gl: angle`, mínimo de 3 execuções,
+descontado o piso do arnês:
+
+| passes | por quadro | por passe |
+|---|---|---|
+| 0 (sem canvas) | 0 ms | — |
+| 1 | 7,0 ms | 7,0 |
+| 3 | 18,8 ms | 6,3 |
+| 4 | 29,9 ms | 7,5 |
+| 7 | 57,6 ms | 8,2 |
+
+E no preview de verdade (navegador, contando quadros pintados): 60 fps até 1
+passe, 56,8 com 3, **34,8 com 4** e **30,8 com 7**.
+
+**Correção, em duas frentes:**
+
+1. *Só vira shader o que precisa **amostrar** os pixels vizinhos.* Cor, grão,
+   vinheta e poeira não amostram — são `filter` e camada de CSS, compostos
+   pela GPU do navegador sem custo por quadro. Daí as duas famílias de
+   `TextureId` e o `precisaDeGl()` de `layers/Fundo.tsx`.
+2. *Um passe só.* `composition/gl/` monta **um** fragment shader com fundo e
+   efeito no mesmo `main()`, num contexto próprio, desenhado síncrono. Um
+   efeito multi-amostra (cromático, borrão radial, retícula) chama a função
+   do fundo de novo em vez de precisar do resultado numa textura intermediária.
+
+**Ao medir:** o arnês de render tem piso alto (~9 s em 90 quadros, de captura
+e x264) e variância grande — a mesma configuração deu de 12,0 a 14,4 s entre
+execuções. Meça o **mínimo de três execuções**, sempre contra o piso, e
+lembre que o render **não é proxy do preview**: para o preview, conte quadros
+pintados por `requestAnimationFrame` num navegador de verdade.
+
+## 29. O hash de ruído dos exemplos quebra em ANGLE
+
+**Sintoma:** um fundo procedural que deveria ser nuvem macia sai com
+**retângulos de borda dura** espalhados pelo quadro. Some e volta conforme o
+tempo. Parece compressão de vídeo — e não é: reproduz igual em `crf 8` com
+preset `medium`.
+
+**Causa:** `fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453)`, o hash de
+todo exemplo de shader na internet, depende de precisão que o `highp` de
+ANGLE não garante. Quando o seno satura, células inteiras do ruído colapsam
+no mesmo valor e viram bloco.
+
+**Correção:** hash de aritmética pura, sem transcendental, em
+`composition/gl/glsl/comum.ts`. Custa o mesmo e não colapsa.
+
+**Como diagnosticar de novo:** renderize o mesmo quadro com `crf 8` e preset
+`medium`. Se o bloco continuar, é shader; se sumir, era x264 no gradiente liso.
+
+## 30. PowerShell 5.1 corrompe os arquivos deste repositório
+
+**Sintoma:** um `.ps1` que parece correto falha com
+*"A cadeia de caracteres não tem o terminador"* numa linha que não tem aspas
+nenhuma. Ou: um `.ts` editado por `Get-Content`/`Set-Content` fica cheio de
+`cÃ³digo` e `â€"`.
+
+**Causa:** duas, e as duas por causa do português. O PowerShell 5.1 lê arquivo
+UTF-8 **sem BOM** como ANSI (CP1252): o travessão `—` (`E2 80 94`) vira
+`â€”`, e o `0x94` do meio é a **aspa curva de fechamento**, que o parser do
+PowerShell aceita como delimitador de string. Daí o erro aparecer longe da
+causa. Pelo mesmo caminho, ler um `.ts` e regravá-lo produz dupla codificação.
+
+**Correção:** arquivos `.ps1` deste repositório são gravados em **UTF-8 com
+BOM**. E para editar código, use as ferramentas de edição do agente, nunca
+`Get-Content | Set-Content` — só o `-Encoding utf8` não salva, porque o
+estrago acontece na *leitura*.

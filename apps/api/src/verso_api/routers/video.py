@@ -15,7 +15,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from verso_core.db import get_session
 from verso_core.models import Track, VideoProject
-from verso_core.schemas import VideoProjectOut, VideoProjectUpdate, VideoSettings
+from verso_core.schemas import (
+    VERSAO_DO_FORMATO,
+    VideoProjectOut,
+    VideoProjectUpdate,
+    VideoSettings,
+)
 
 router = APIRouter(tags=["vídeo"])
 
@@ -31,7 +36,11 @@ async def get_video_project(
 
     project = await session.scalar(select(VideoProject).where(VideoProject.track_id == track_id))
     if project is None:
-        project = VideoProject(track_id=track_id, settings=VideoSettings().model_dump())
+        project = VideoProject(
+            track_id=track_id,
+            settings=VideoSettings().model_dump(),
+            settings_version=VERSAO_DO_FORMATO,
+        )
         session.add(project)
         await session.commit()
         await session.refresh(project)
@@ -58,6 +67,7 @@ async def update_video_project(
 
     project.template_id = payload.template_id
     project.settings = payload.settings.model_dump()
+    project.settings_version = VERSAO_DO_FORMATO
     await session.commit()
     await session.refresh(project)
     return project

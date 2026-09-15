@@ -191,11 +191,24 @@ export const api = {
   /** Devolve o projeto do editor de vídeo, criando-o com os padrões se não houver. */
   getVideoProject: (id: string) => request<VideoProject>(`/tracks/${id}/video-project`),
 
-  /** Grava `settings` inteiro — nunca cria versão de letra, é aparência. */
-  updateVideoProject: (id: string, settings: VideoSettings, templateId: string | null = null) =>
+  /**
+   * Grava `settings` inteiro — nunca cria versão de letra, é aparência.
+   *
+   * `keepalive` existe para o salvamento de última hora, quando a aba está
+   * fechando ou recarregando: sem ele o navegador cancela a requisição junto
+   * com a página e o ajuste some sem aviso. Tem limite de 64 KB de corpo, o
+   * que sobra para um `VideoSettings`.
+   */
+  updateVideoProject: (
+    id: string,
+    settings: VideoSettings,
+    templateId: string | null = null,
+    keepalive = false,
+  ) =>
     request<VideoProject>(`/tracks/${id}/video-project`, {
       method: "PUT",
       body: JSON.stringify({ template_id: templateId, settings }),
+      keepalive,
     }),
 
   listVideoTemplates: () => request<unknown[]>("/video/templates"),

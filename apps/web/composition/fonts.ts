@@ -9,28 +9,30 @@
  * render espera a fonte carregar antes do quadro 0, e falha alto se não
  * carregar, em vez de sair calado com a fonte errada.
  *
- * Catálogo desta etapa: as três famílias que já são a identidade visual do
- * Verso (`app/globals.css`), como WOFF2 reais baixados do Google Fonts (SIL
- * OFL). O catálogo cresce por DADO — acrescentar uma entrada e o arquivo —,
- * nunca por mudança de mecanismo; é o que a etapa 3 faz para completar as
- * oito famílias da spec.
+ * As oito famílias da spec, todas SIL OFL. As seis primeiras variam o peso
+ * num eixo contínuo (um arquivo cobre o intervalo inteiro); Anton, Archivo
+ * Black e Bebas Neue são **estáticas de um peso só** — é por isso que
+ * `pesoSuportado()` existe: sem ele o controle de peso parecia quebrado
+ * exatamente nessas três, porque o Chromium sintetiza negrito e o resultado
+ * é quase idêntico.
  */
 import { loadFont } from "@remotion/fonts";
 import { staticFile } from "remotion";
+import type { FontFamilyId } from "./settings";
 
-export type FontFamilyId = "bricolage" | "source-serif" | "jetbrains";
-
-export type PesoDeFonte = {
-  weight: number;
-  arquivo: string;
-};
+export type { FontFamilyId };
 
 export type FamiliaDeFonte = {
   id: FontFamilyId;
   /** O valor de `fontFamily` no CSS. Igual no preview e no render. */
   family: string;
   rotulo: string;
-  pesos: PesoDeFonte[];
+  arquivo: string;
+  /** Intervalo de peso que o arquivo cobre. Iguais quando a fonte é estática. */
+  pesoMin: number;
+  pesoMax: number;
+  /** Fallback genérico, para o caso de o WOFF2 não chegar. */
+  fallback: string;
 };
 
 export const FONTES: FamiliaDeFonte[] = [
@@ -38,27 +40,73 @@ export const FONTES: FamiliaDeFonte[] = [
     id: "bricolage",
     family: "Bricolage Grotesque",
     rotulo: "Bricolage",
-    // Fonte variável: o mesmo arquivo cobre 400 e 800 — o FontFace descreve
-    // o peso pedido, e o Chromium escolhe a instância certa dentro do eixo.
-    pesos: [
-      { weight: 400, arquivo: "fonts/bricolage-grotesque.woff2" },
-      { weight: 800, arquivo: "fonts/bricolage-grotesque.woff2" },
-    ],
+    arquivo: "fonts/bricolage-grotesque.woff2",
+    pesoMin: 200,
+    pesoMax: 800,
+    fallback: "sans-serif",
+  },
+  {
+    id: "space-grotesk",
+    family: "Space Grotesk",
+    rotulo: "Space Grotesk",
+    arquivo: "fonts/space-grotesk.woff2",
+    pesoMin: 300,
+    pesoMax: 700,
+    fallback: "sans-serif",
   },
   {
     id: "source-serif",
     family: "Source Serif 4",
     rotulo: "Source Serif",
-    pesos: [{ weight: 400, arquivo: "fonts/source-serif-4.woff2" }],
+    arquivo: "fonts/source-serif-4.woff2",
+    pesoMin: 200,
+    pesoMax: 900,
+    fallback: "serif",
+  },
+  {
+    id: "playfair",
+    family: "Playfair Display",
+    rotulo: "Playfair",
+    arquivo: "fonts/playfair-display.woff2",
+    pesoMin: 400,
+    pesoMax: 900,
+    fallback: "serif",
   },
   {
     id: "jetbrains",
     family: "JetBrains Mono",
     rotulo: "JetBrains Mono",
-    pesos: [
-      { weight: 400, arquivo: "fonts/jetbrains-mono.woff2" },
-      { weight: 700, arquivo: "fonts/jetbrains-mono.woff2" },
-    ],
+    arquivo: "fonts/jetbrains-mono.woff2",
+    pesoMin: 100,
+    pesoMax: 800,
+    fallback: "monospace",
+  },
+  {
+    id: "anton",
+    family: "Anton",
+    rotulo: "Anton",
+    arquivo: "fonts/anton.woff2",
+    pesoMin: 400,
+    pesoMax: 400,
+    fallback: "sans-serif",
+  },
+  {
+    id: "archivo-black",
+    family: "Archivo Black",
+    rotulo: "Archivo Black",
+    arquivo: "fonts/archivo-black.woff2",
+    pesoMin: 400,
+    pesoMax: 400,
+    fallback: "sans-serif",
+  },
+  {
+    id: "bebas",
+    family: "Bebas Neue",
+    rotulo: "Bebas Neue",
+    arquivo: "fonts/bebas-neue.woff2",
+    pesoMin: 400,
+    pesoMax: 400,
+    fallback: "sans-serif",
   },
 ];
 
@@ -68,14 +116,29 @@ export function familiaPorId(id: string): FamiliaDeFonte {
   return FONTES.find((f) => f.id === id) ?? FONTES[0];
 }
 
+/** Peso que esta família realmente entrega, limitado ao eixo que ela tem. */
+export function pesoSuportado(familia: FamiliaDeFonte, peso: number): number {
+  return Math.min(familia.pesoMax, Math.max(familia.pesoMin, peso));
+}
+
+/** `fontFamily` pronto para o style, com o fallback genérico junto. */
+export function pilhaDeFonte(familia: FamiliaDeFonte): string {
+  return `"${familia.family}", ${familia.fallback}`;
+}
+
+/** true quando o controle de peso não tem efeito nenhum nesta família. */
+export function pesoEhFixo(familia: FamiliaDeFonte): boolean {
+  return familia.pesoMin === familia.pesoMax;
+}
+
 let carregadas = false;
 
 /**
  * Carrega todas as famílias, incondicionalmente.
  *
- * São poucos WOFF2 de dezenas de KB — carregar todas de uma vez faz trocar de
- * fonte no editor ser instantâneo, e o render nunca depende de qual família
- * as settings escolheram.
+ * São WOFF2 de dezenas de KB — carregar todas de uma vez faz trocar de fonte
+ * no editor ser instantâneo, e o render nunca depende de qual família as
+ * settings escolheram.
  *
  * A guarda de `document` existe porque o Next PRÉ-RENDERIZA componentes de
  * cliente no servidor, onde este módulo é avaliado em Node — `FontFace` não
@@ -86,13 +149,17 @@ export function carregarFontes(): void {
   carregadas = true;
 
   for (const familia of FONTES) {
-    for (const { weight, arquivo } of familia.pesos) {
-      void loadFont({
-        family: familia.family,
-        url: staticFile(arquivo),
-        format: "woff2",
-        weight: String(weight),
-      });
-    }
+    void loadFont({
+      family: familia.family,
+      url: staticFile(familia.arquivo),
+      format: "woff2",
+      // Um arquivo variável precisa declarar o INTERVALO: declarado como um
+      // peso só, o Chromium trava a instância nesse peso e o controle de peso
+      // deixa de ter efeito.
+      weight:
+        familia.pesoMin === familia.pesoMax
+          ? String(familia.pesoMin)
+          : `${familia.pesoMin} ${familia.pesoMax}`,
+    });
   }
 }

@@ -25,6 +25,10 @@ export type EntradaDeVerso = {
   tweak: TweakId;
   /** Índice do verso na letra. Dá fase própria ao floating e ao bubbling. */
   indiceDoVerso: number;
+  /** Amplitude da animação, de 0 a 1 — settings.motion.intensidade. */
+  intensidade: number;
+  /** Anima também a saída do verso, não só a entrada. */
+  saida: boolean;
 };
 
 /** O que um modo sabe sobre um segmento (sílaba ou palavra) do verso. */

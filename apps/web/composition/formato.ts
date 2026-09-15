@@ -60,18 +60,36 @@ export const TIPOGRAFIA: Record<
   AspectRatio,
   {
     tamanho: Record<"small" | "medium" | "large", number>;
+    /** Tamanho dos versos vizinhos, quando `structure.mostrarVizinhos` liga. */
+    tamanhoVizinho: number;
     margemLateral: number;
     larguraMaxima: number;
   }
 > = {
   "16:9": {
-    tamanho: { small: 56, medium: 76, large: 104 },
+    // Os três degraus são LARGOS de propósito: quando eram 56/76/104, trocar
+    // de "pequeno" para "grande" mudava pouco o quadro e o controle parecia
+    // não fazer nada.
+    tamanho: { small: 52, medium: 88, large: 136 },
+    tamanhoVizinho: 40,
     margemLateral: 120,
     larguraMaxima: 1560,
   },
   "9:16": {
-    tamanho: { small: 48, medium: 64, large: 86 },
+    tamanho: { small: 44, medium: 72, large: 110 },
+    tamanhoVizinho: 34,
     margemLateral: 72,
     larguraMaxima: 936,
   },
 };
+
+/** Limites do multiplicador fino de `font.escala`. */
+export const ESCALA_MINIMA = 0.5;
+export const ESCALA_MAXIMA = 2;
+
+/** O corpo final da letra: o degrau escolhido vezes o ajuste fino. */
+export function tamanhoDaLetra(settings: VideoSettings): number {
+  const base = TIPOGRAFIA[settings.output.aspectRatio].tamanho[settings.font.size];
+  const escala = Math.min(ESCALA_MAXIMA, Math.max(ESCALA_MINIMA, settings.font.escala));
+  return Math.round(base * escala);
+}

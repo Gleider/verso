@@ -52,3 +52,24 @@ export const PALETAS: Paleta[] = [
 export function paletaPorId(id: string): Paleta {
   return PALETAS.find((p) => p.id === id) ?? PALETAS[0];
 }
+
+/**
+ * As cores que o texto realmente usa.
+ *
+ * A paleta é o atalho; `corCantada`/`corPorCantar` são a escolha livre e
+ * mandam nela quando existem. Ficam separadas em vez de sobrescreverem a
+ * paleta para que trocar de paleta depois não apague a cor escolhida à mão —
+ * e para que limpar a escolha volte à paleta sem precisar lembrar qual era.
+ */
+export function coresDoTexto(style: {
+  palette: string;
+  corCantada: string | null;
+  corPorCantar: string | null;
+}): Paleta {
+  const base = paletaPorId(style.palette);
+  return {
+    ...base,
+    sung: style.corCantada ?? base.sung,
+    unsung: style.corPorCantar ?? base.unsung,
+  };
+}
