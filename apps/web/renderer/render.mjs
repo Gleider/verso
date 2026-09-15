@@ -36,12 +36,20 @@ const publicDir = path.join(raiz, "public");
  *
  * SHA-256 sobre conteúdo, não sobre mtime: `COPY` de Docker e `git checkout`
  * reescrevem mtimes sem mudar conteúdo, e o bundle seria refeito a cada deploy.
+ *
+ * `lib/` entra junto porque a composição importa de lá — `versos.ts` chama
+ * `lib/syllables` e `lib/normalize`, `audio/` chama `lib/beat`. Sem isso, uma
+ * correção na silabificação ou no saneamento dos timings reaproveitava o
+ * bundle antigo: o render terminava com exit 0, o MP4 saía, e o conserto
+ * simplesmente não estava nele.
  */
 function impressaoDoBundle() {
   const hash = createHash("sha256");
   const visitar = (dir) => {
     if (!fs.existsSync(dir)) return;
     for (const nome of fs.readdirSync(dir).sort()) {
+      // Teste não entra no bundle; incluí-lo só forçaria reempacotar à toa.
+      if (nome === "__tests__") continue;
       const caminho = path.join(dir, nome);
       const stat = fs.statSync(caminho);
       if (stat.isDirectory()) visitar(caminho);
@@ -52,6 +60,7 @@ function impressaoDoBundle() {
     }
   };
   visitar(path.join(raiz, "composition"));
+  visitar(path.join(raiz, "lib"));
   visitar(publicDir);
   const lockfile = path.join(raiz, "package-lock.json");
   if (fs.existsSync(lockfile)) hash.update(fs.readFileSync(lockfile));
