@@ -17,6 +17,7 @@ dele. Não há multiusuário, autenticação nem nuvem.
 | `.claude/rules/conventions.md` | Ao escrever qualquer código. |
 | `docs/specs/2026-09-12-verso-design.md` | Plano original, roadmap e decisões. |
 | `docs/specs/2026-09-14 integrated-video-editor/spec.md` | Editor de vídeo integrado: por que Remotion, o desenho do preview/render. |
+| `docs/specs/2026-09-15 saas/spec.md` | **Proposta, não implementada.** Como este app viraria um SaaS pago em GCP. Leia antes de supor que contas, cobrança ou nuvem existem — não existem. |
 
 ## Comandos
 
