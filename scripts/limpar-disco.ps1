@@ -168,6 +168,14 @@ if (-not (Test-Path $vhdx)) {
     return
 }
 
+# Sem o trim, o compact não acha nada: apagar imagem libera o bloco no ext4
+# de dentro da VM, mas ninguém avisa o VHDX. Medido: 58 GB de arquivo com
+# 65 MB de dados, e o compact "com êxito" liberou 0,01 GB. Precisa do Docker
+# ligado, por isso vem antes de derrubá-lo.
+Escrever "fstrim dentro da VM (avisa o VHDX dos blocos livres)"
+Rodar docker @("run", "--rm", "--privileged", "--pid=host", "alpine",
+    "nsenter", "-t", "1", "-m", "--", "fstrim", "-av") 2
+
 Escrever "encerrando o Docker Desktop"
 Get-Process "Docker Desktop" -ErrorAction SilentlyContinue | Stop-Process -Force
 Get-Process "com.docker.backend" -ErrorAction SilentlyContinue | Stop-Process -Force
