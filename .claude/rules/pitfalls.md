@@ -659,3 +659,38 @@ serve um bundle velho por tempo indeterminado.
 **A regra mais larga:** cache com chave incompleta não falha, **mente**. Se
 algum dia o sintoma for "minha mudança não teve efeito nenhum", apagar
 `storage/remotion-bundle*` é o teste de uma linha que separa as duas hipóteses.
+
+## 35. Letra medida por VERSO perdia todo o timing ao ser salva
+
+**Sintoma:** você corrige uma palavra numa letra vinda do Musixmatch ou de um
+`.lrc`, salva, e a música inteira vai parar nos primeiros trinta segundos do
+vídeo. Nenhum erro: a versão nova é criada, tem o número de versos certo, o
+texto certo — só os tempos é que viraram `0, 300, 600…`.
+
+**Causa:** `reconcile_timings` ancorava o diff **só em palavras**. Letra
+importada não tem palavra nenhuma (`words` vazio; o tempo está em `start_ms`,
+por verso), então `old_words` saía vazio, nada casava, e a interpolação
+recomeçava do zero com `DEFAULT_WORD_MS` por token. O número 27 300 que
+aparecia no `end_ms` era literalmente 91 palavras × 300 ms.
+
+**Correção:** `_line_anchors` sintetiza âncoras a partir do tempo do verso,
+só para o diff ter em que se apoiar; o verso reconstruído volta a sair **sem
+palavras**, com o `start_ms`/`end_ms` originais copiados quando ele ficou
+intacto. Inventar palavras seria fingir uma precisão que ninguém mediu — e
+`composition/versos.ts` já sabe desenhar o verso inteiro sem `words`.
+
+**Como reconhecer de novo:** compare `min(start_ms)` da versão nova com o da
+anterior no banco. Se a nova começa em 0 e a anterior não, é isto:
+
+```sql
+SELECT v.version_no, v.source, min(l.start_ms), max(l.end_ms),
+       count(*) FILTER (WHERE jsonb_array_length(l.words) = 0) AS sem_palavras
+FROM lyrics_version v JOIN lyric_line l ON l.version_id = v.id
+WHERE v.track_id = '<id>' GROUP BY v.version_no, v.source ORDER BY v.version_no;
+```
+
+**A lição maior:** uma letra deste projeto tem **duas granularidades de tempo**
+— por palavra (ASR) e por verso (importada). Todo código que consome timing
+precisa responder pelas duas, e a que quebra em silêncio é sempre a segunda,
+porque o caminho do ASR é o que se testa sem pensar.
+

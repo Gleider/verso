@@ -7,7 +7,13 @@ o campo chega como `undefined` do lado TS e o vídeo sai com o padrão errado,
 calado.
 """
 
-from verso_core.schemas import VERSAO_DO_FORMATO, StructureSettings, VideoSettings
+from verso_core.schemas import (
+    VERSAO_DO_FORMATO,
+    OutputSettings,
+    RecorteSettings,
+    StructureSettings,
+    VideoSettings,
+)
 
 
 def test_padrao_do_schema_bate_com_o_do_typescript():
@@ -19,11 +25,13 @@ def test_padrao_do_schema_bate_com_o_do_typescript():
     assert s.structure.vizinhos == 0
     assert s.style.corCantada is None
     assert s.output.aspectRatio == "16:9"
+    # Sem recorte, o vídeo é a música inteira.
+    assert s.output.recorte is None
 
 
 def test_versao_do_formato_acompanha_o_typescript():
     # Se este número mudar de um lado só, o diagnóstico de versão mente.
-    assert VERSAO_DO_FORMATO == 5
+    assert VERSAO_DO_FORMATO == 6
 
 
 def test_projeto_antigo_com_mostrar_vizinhos_ligado_vira_uma_linha():
@@ -108,3 +116,24 @@ def test_projeto_salvo_antes_do_movimento_continua_valendo():
     s = VideoSettings.model_validate({"style": {"texture": "grain", "textureIntensity": 0.9}})
     assert s.style.movimento == "none"
     assert s.style.textureIntensity == 0.9
+
+
+def test_proporcoes_verticais_das_redes_sao_aceitas():
+    # 9:16 é TikTok/Reels/Shorts, 4:5 é o feed do Instagram, 1:1 é o quadrado.
+    # Espelha `AspectRatio` de composition/settings.ts.
+    for proporcao in ("16:9", "9:16", "4:5", "1:1"):
+        assert OutputSettings.model_validate({"aspectRatio": proporcao}).aspectRatio == proporcao
+
+
+def test_recorte_exige_fim_depois_do_comeco():
+    import pytest
+
+    with pytest.raises(ValueError):
+        RecorteSettings.model_validate({"inicioMs": 5_000, "fimMs": 5_000})
+
+
+def test_recorte_valido_atravessa_o_schema_inteiro():
+    s = VideoSettings.model_validate({"output": {"recorte": {"inicioMs": 10_000, "fimMs": 30_000}}})
+
+    assert s.output.recorte is not None
+    assert s.output.recorte.fimMs == 30_000

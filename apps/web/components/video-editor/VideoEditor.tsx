@@ -7,7 +7,7 @@ import { Player } from "@remotion/player";
 import type { PlayerRef } from "@remotion/player";
 import { Karaoke } from "@/composition/Karaoke";
 import { dimensoesDaSaida } from "@/composition/formato";
-import { quadroDoMs, totalDeQuadros } from "@/composition/tempo";
+import { janelaDeQuadros, quadroDoMs, totalDeQuadros } from "@/composition/tempo";
 import { prepararVersos } from "@/composition/versos";
 import type { KaraokeProps } from "@/composition/props";
 import { VideoExport } from "@/components/VideoExport";
@@ -158,6 +158,18 @@ export function VideoEditor({ track, initialProject }: Props) {
     [fps],
   );
 
+  /**
+   * O instante em que o preview está, lido SOB DEMANDA.
+   *
+   * É função, não estado: um `setState` por quadro re-renderizaria o editor
+   * inteiro no laço de animação (`architecture.md`). Quem chama isto é um
+   * clique — "o trecho começa aqui" —, não o relógio.
+   */
+  const tempoAtualMs = useCallback(
+    () => ((playerRef.current?.getCurrentFrame() ?? 0) / fps) * 1000,
+    [fps],
+  );
+
   function atualizarSettings(proximo: VideoSettings) {
     setSettings(proximo);
     persistir(proximo, templateId);
@@ -187,8 +199,14 @@ export function VideoEditor({ track, initialProject }: Props) {
   }
 
   const { width, height } = dimensoesDaSaida(settings);
-  const retrato = settings.output.aspectRatio === "9:16";
+  // Derivado das dimensões, não da string da proporção: com 4:5 e 1:1 no
+  // catálogo, comparar com "9:16" deixava os dois novos formatos caírem no
+  // ramo de paisagem e estourarem a altura da caixa do preview.
+  const retrato = height > width;
   const duracaoMs = track.duration_ms ?? 0;
+  // O trecho escolhido para exportar também recorta o PREVIEW: ver o corte é
+  // a única forma de escolher onde ele começa.
+  const janela = janelaDeQuadros(settings.output.recorte, duracaoMs, fps);
   // Sincronia por palavra e por sílaba só existe se a letra tiver timing por
   // palavra. Letra vinda de .lrc ou do Musixmatch tem tempo por VERSO, e o
   // controle ficava lá oferecendo uma opção que não mudava nada.
@@ -269,6 +287,8 @@ export function VideoEditor({ track, initialProject }: Props) {
               trackId={track.id}
               settings={settings}
               hasBackground={track.has_background}
+              duracaoMs={duracaoMs}
+              tempoAtualMs={tempoAtualMs}
               onChange={atualizarSettings}
               onBackgroundUploaded={() => setBackgroundVersion((v) => v + 1)}
             />
@@ -322,7 +342,12 @@ export function VideoEditor({ track, initialProject }: Props) {
               // Abrir no primeiro verso, não no quadro 0: a maioria das faixas
               // começa com introdução instrumental, e o editor abria numa tela
               // sem letra nenhuma — parecia que o preview não funcionava.
-              initialFrame={quadroDoMs(versos[0]?.inicioMs ?? 0, fps)}
+              initialFrame={janela ? janela[0] : quadroDoMs(versos[0]?.inicioMs ?? 0, fps)}
+              // A composição continua sendo a música inteira; o que muda é a
+              // fatia que se toca — exatamente o que `frameRange` faz no
+              // render, para o preview e o MP4 não divergirem.
+              inFrame={janela ? janela[0] : null}
+              outFrame={janela ? janela[1] : null}
               controls
               acknowledgeRemotionLicense
               // Encaixa dentro da caixa preservando a proporção: em 16:9 ocupa
@@ -344,7 +369,7 @@ export function VideoEditor({ track, initialProject }: Props) {
             onSeekMs={buscarNoPlayer}
           />
 
-          <VideoExport trackId={track.id} disabled={false} />
+          <VideoExport trackId={track.id} disabled={false} recorte={settings.output.recorte} />
         </div>
       </div>
     </div>

@@ -391,7 +391,11 @@ async def download_render(
 
     track = await session.get(Track, track_id)
     safe = "".join(c for c in (track.title if track else "verso") if c.isalnum() or c in " -_")
-    name = f"{safe.strip() or 'verso'} ({job.params.get('resolution', 'video')}).mp4"
+    # Render de trecho e render inteiro têm o mesmo nome sem isto, e vão parar
+    # na mesma pasta de downloads um por cima do outro.
+    recorte = (job.params or {}).get("recorteMs")
+    trecho = f" {recorte[0] // 1000}s-{recorte[1] // 1000}s" if recorte else ""
+    name = f"{safe.strip() or 'verso'} ({job.params.get('resolution', 'video')}{trecho}).mp4"
     return FileResponse(path, media_type="video/mp4", filename=name)
 
 

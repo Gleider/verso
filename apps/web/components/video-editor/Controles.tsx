@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import type { ReactNode } from "react";
+import { formatarTimecode, parseTimecode } from "@/lib/rascunho";
 
 /** Título de seção — o mesmo rótulo mono em caixa alta de toda aba do editor. */
 export function Secao({ titulo, children }: { titulo: string; children: ReactNode }) {
@@ -105,3 +107,60 @@ export function corSolida(valor: string): string {
 
 /** Percentual de 0 a 1, o formato mais usado nos painéis. */
 export const comoPorcento = (v: number) => `${Math.round(v * 100)}%`;
+
+/**
+ * Campo de tempo em `mm:ss.cc`.
+ *
+ * Só comita no blur e no Enter: comitar a cada tecla faria "1:2" virar 1 min 2 s
+ * no meio de quem estava digitando "1:23", e o valor saltaria embaixo do dedo.
+ */
+export function CampoDeTempo({
+  rotulo,
+  valorMs,
+  onChange,
+  onUsarTempoAtual,
+}: {
+  rotulo: string;
+  valorMs: number;
+  onChange: (ms: number) => void;
+  onUsarTempoAtual?: () => void;
+}) {
+  const [rascunho, setRascunho] = useState<string | null>(null);
+
+  function comitar() {
+    if (rascunho === null) return;
+    const ms = parseTimecode(rascunho);
+    setRascunho(null);
+    if (ms !== null) onChange(ms);
+  }
+
+  return (
+    <label className="flex items-center gap-2 text-xs text-ink-2">
+      <span className="w-14 shrink-0">{rotulo}</span>
+      <input
+        value={rascunho ?? formatarTimecode(valorMs)}
+        onChange={(e) => setRascunho(e.target.value)}
+        onBlur={comitar}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            comitar();
+          }
+          if (e.key === "Escape") setRascunho(null);
+        }}
+        inputMode="numeric"
+        className="w-[84px] border border-line bg-ground px-2 py-1 font-mono text-[11px] tabular-nums text-ink focus:border-amber focus:outline-none"
+      />
+      {onUsarTempoAtual && (
+        <button
+          type="button"
+          onClick={onUsarTempoAtual}
+          title="usar o instante em que o preview está"
+          className="font-mono text-[10px] text-ink-3 hover:text-amber"
+        >
+          aqui
+        </button>
+      )}
+    </label>
+  );
+}

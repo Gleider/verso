@@ -19,9 +19,15 @@ O que sobrou em `lib/` é pouco de propósito: `sync.ts` (sincronia do player
 antigo) e `effects.ts` (o VHS/respiração de CSS) foram apagados quando o editor
 de vídeo passou a ser a única definição do vídeo, e o que eles faziam vive hoje
 em `composition/versos.ts`, `composition/preenchimento.ts`,
-`composition/ambiente.ts` e `composition/efeitos/`. Os três módulos restantes são
-**importados só pela composição** — se um dia mais um deles perder o último
-consumidor de fora, o lugar dele é dentro de `composition/`.
+`composition/ambiente.ts` e `composition/efeitos/`. `syllables`, `normalize` e
+`beat` são **importados só pela composição** — se um dia mais um deles perder o
+último consumidor de fora, o lugar dele é dentro de `composition/`.
+
+A exceção é `lib/rascunho.ts`, que é do **editor de letra**, não da composição:
+ele guarda o que o editor decide antes de salvar — o tempo efetivo de cada
+verso, a conversão de timecode, e a regra que diz se aquele estado pede uma
+versão nova ou só um ajuste in-place (`oQueSalvar`). Está em `lib/` pelo mesmo
+motivo de sempre: é decisão, e decisão não mora em componente.
 
 Essa separação é o que permite testar o coração do produto sem banco, sem
 navegador e sem áudio — e, desde o editor de vídeo, sem Chromium também.
@@ -105,6 +111,20 @@ completo. Resumo do que existe:
 - `apps/web/app/track/[id]/video/` é a tela do editor: `<Player>` do
   `@remotion/player` montando `composition/Karaoke.tsx`, com um painel por
   aba (Background, Font, Motion, Structure, Style, Templates).
+- `output.aspectRatio` cobre quatro proporções, e o rótulo do painel traz o
+  destino porque é assim que a escolha é feita: 16:9 (YouTube), 9:16 (TikTok,
+  Reels, Shorts), 4:5 (feed do Instagram) e 1:1. O lado curto do espaço de
+  design é **1080 em todas** — é isso que faz o fator de escala ser o mesmo, e
+  é o que permite acrescentar um formato sem recalibrar nitidez (há teste).
+- `output.recorte` (`{inicioMs, fimMs}` ou `null`) é o trecho que vira vídeo,
+  para o corte de rede social. Ele **não muda a composição**: o preview usa
+  `inFrame`/`outFrame` e o render usa `frameRange`, sobre a mesma linha do
+  tempo da música inteira. Deslocar versos e áudio para o começo do trecho
+  recriaria por outro caminho a divergência entre preview e MP4 que a
+  composição única elimina, e poria o envelope da batida fora de fase — ele é
+  construído sempre do quadro 0 (`pitfalls.md` §17). A tradução
+  recorte → quadros é `composition/tempo.ts:janelaDeQuadros`, espelhada em
+  `render.mjs` (que é `.mjs` e não pode importar o `.ts`).
 - `apps/web/app/track/[id]/play/` monta a **mesma composição**, em tela cheia,
   com o ajuste de offset ao redor dela — não dentro.
 

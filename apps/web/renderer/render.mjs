@@ -18,6 +18,28 @@ import { fileURLToPath } from "node:url";
 
 const emitir = (evento) => process.stdout.write(JSON.stringify(evento) + "\n");
 
+/**
+ * A janela [primeiro, último] de quadros do recorte, ou `null` para o vídeo
+ * inteiro. Os dois extremos são inclusivos, como `frameRange` espera.
+ *
+ * Espelha `composition/tempo.ts:janelaDeQuadros`. Está duplicado aqui porque
+ * este arquivo é .mjs e fica fora do tsc de propósito — não pode importar o
+ * .ts. Se um dos dois mudar, o outro muda junto.
+ */
+function janelaDeQuadros(recorte, totalDeQuadros, fps) {
+  if (!recorte) return null;
+  const { inicioMs, fimMs } = recorte;
+  if (!Number.isFinite(inicioMs) || !Number.isFinite(fimMs)) return null;
+  if (inicioMs < 0 || fimMs <= inicioMs) return null;
+
+  const ultimo = totalDeQuadros - 1;
+  const quadroDoMs = (ms) => Math.floor((ms / 1000) * fps);
+  const inicio = Math.min(Math.max(0, quadroDoMs(inicioMs)), ultimo);
+  // `fimMs` é exclusivo: o quadro que o contém já é o primeiro de fora.
+  const fim = Math.min(Math.max(inicio, quadroDoMs(fimMs) - 1), ultimo);
+  return [inicio, fim];
+}
+
 async function lerStdin() {
   const pedacos = [];
   for await (const pedaco of process.stdin) pedacos.push(pedaco);
@@ -121,6 +143,19 @@ async function principal() {
     durationInFrames: composition.durationInFrames,
   });
 
+  // --- recorte ---------------------------------------------------------------
+  // O trecho vem do PRÓPRIO settings (`output.recorte`) — a mesma fonte que o
+  // preview do editor lê. Um segundo campo no job seria um lugar a mais para
+  // divergir do que a pessoa viu na tela.
+  const frameRange = janelaDeQuadros(
+    job.inputProps?.settings?.output?.recorte,
+    composition.durationInFrames,
+    composition.fps,
+  );
+  if (frameRange) {
+    emitir({ tipo: "recorte", primeiroQuadro: frameRange[0], ultimoQuadro: frameRange[1] });
+  }
+
   fs.mkdirSync(path.dirname(job.outputLocation), { recursive: true });
 
   // --- render ----------------------------------------------------------------
@@ -138,6 +173,12 @@ async function principal() {
     audioCodec: "aac",
     audioBitrate: "192k",
     concurrency: job.concurrency ?? null,
+    // Render de trecho: a composição continua sendo a música inteira, e só
+    // esta fatia de quadros é pedida. É o que mantém preview e MP4 idênticos —
+    // deslocar versos e áudio para o começo do trecho recriaria a divergência
+    // que a composição única elimina, e poria o envelope da batida fora de
+    // fase (ele é construído sempre do quadro 0).
+    frameRange,
     timeoutInMilliseconds: timeout,
     logLevel: "error",
     overwrite: true,

@@ -4,6 +4,9 @@ Quando o usuário arruma um verso, os timestamps das palavras não podem ser
 jogados fora — é deles que a sincronização da fase 2 depende. A solução é um
 diff por token: palavra que não mudou mantém o seu timing; palavra nova recebe
 um timing interpolado a partir das vizinhas e marca a linha como `needs_realign`.
+
+Letra importada (.lrc, Musixmatch) não tem palavra nenhuma: o tempo dela é por
+VERSO. Esse caso tem um caminho próprio aqui — ver `_line_anchors`.
 """
 
 from __future__ import annotations
@@ -76,36 +79,128 @@ def _interpolate(pending: list[dict], before: Word | None, after: Word | None) -
         slot["end"] = int(start + step * (position + 1))
 
 
+def _kept(values: list | None, new_texts: list[str], default):
+    """Recorta uma lista paralela a `new_texts` do mesmo jeito que o parse recorta.
+
+    As linhas em branco somem no parse (viram marca de estrofe); tudo que o
+    editor manda por linha precisa acompanhar exatamente o mesmo corte, senão o
+    ajuste de um verso cai sobre o vizinho.
+    """
+    items = list(values or [])
+    return [
+        items[i] if i < len(items) else default
+        for i, raw in enumerate(new_texts)
+        if raw.strip()
+    ]
+
+
+def _line_anchors(line: Line, assumed_end: int | None) -> list[Word]:
+    """Âncoras sintéticas para um verso que tem tempo, mas não tem palavras.
+
+    Letra de .lrc ou do Musixmatch é medida por VERSO. Sem estas âncoras o diff
+    por token não tem em que se apoiar: `old_words` sai vazio, nada casa, e a
+    interpolação recomeça a letra inteira do zero — a música inteira ia parar
+    nos primeiros trinta segundos, sem erro nenhum.
+
+    Elas existem só para ancorar a comparação. O verso reconstruído volta a sair
+    sem palavras, em `reconcile_timings`.
+    """
+    tokens = line.text.split()
+    if line.start_ms is None or not tokens:
+        return []
+    fallback = line.start_ms + DEFAULT_WORD_MS * len(tokens)
+    end = line.end_ms or assumed_end or fallback
+    if end <= line.start_ms:
+        end = fallback
+    step = (end - line.start_ms) / len(tokens)
+    return [
+        Word(
+            text=token,
+            start_ms=int(line.start_ms + step * position),
+            end_ms=int(line.start_ms + step * (position + 1)),
+            probability=1.0,
+        )
+        for position, token in enumerate(tokens)
+    ]
+
+
+def _shift_to(words: list[Word], start_ms: int) -> list[Word]:
+    """Move o verso inteiro para começar em `start_ms`, sem esticar nada."""
+    if not words:
+        return words
+    delta = start_ms - words[0].start_ms
+    return [
+        Word(
+            text=word.text,
+            start_ms=word.start_ms + delta,
+            end_ms=word.end_ms + delta,
+            probability=word.probability,
+        )
+        for word in words
+    ]
+
+
 def reconcile_timings(
     old_lines: list[Line],
     new_texts: list[str],
     reviewed_flags: list[bool] | None = None,
+    *,
+    pinned_ms: list[int | None] | None = None,
+    nudges_ms: list[int | None] | None = None,
+    stanza_flags: list[bool] | None = None,
 ) -> list[Line]:
     """Recompõe os versos a partir do texto editado, reaproveitando o que der.
 
     `new_texts` é a letra como o usuário a deixou, um item por verso; itens
-    vazios viram separadores de estrofe em vez de versos. `reviewed_flags`
-    acompanha `new_texts` e permite confirmar uma linha sem alterar o texto.
+    vazios viram separadores de estrofe em vez de versos. As listas opcionais
+    acompanham `new_texts` item a item:
+
+    - `reviewed_flags` confirma uma linha sem alterar o texto;
+    - `pinned_ms` é o tempo que a pessoa fixou à mão — ponto de legenda novo ou
+      verso arrastado no editor. Vence o timing medido;
+    - `nudges_ms` é o ajuste manual de cada verso vindo do editor. Sem ele o
+      ajuste é herdado pela POSIÇÃO, e inserir um verso no topo empurraria o
+      ajuste de todos os de baixo para o verso errado;
+    - `stanza_flags` preserva as marcas de estrofe que o editor já conhece.
     """
-    flags = list(reviewed_flags or [])
-    # As linhas em branco somem no parse; as flags precisam acompanhar o mesmo corte.
-    kept_flags = [
-        flags[i] if i < len(flags) else False
-        for i, raw in enumerate(new_texts)
-        if raw.strip()
-    ]
+    kept_flags = _kept(reviewed_flags, new_texts, False)
+    kept_pins = _kept(pinned_ms, new_texts, None)
+    kept_nudges = _kept(nudges_ms, new_texts, None)
+    kept_stanzas = _kept(stanza_flags, new_texts, None)
     parsed = _split_new_lines(new_texts)
     if not parsed:
         return []
 
-    old_words: list[Word] = [word for line in old_lines for word in line.words]
+    # Achata as palavras antigas, guardando de que verso cada uma veio e se foi
+    # medida de verdade ou sintetizada a partir do tempo do verso.
+    old_words: list[Word] = []
+    word_origin: list[int] = []
+    word_measured: list[bool] = []
+    for position, line in enumerate(old_lines):
+        if line.words:
+            for word in line.words:
+                old_words.append(word)
+                word_origin.append(position)
+                word_measured.append(True)
+            continue
+        assumed_end = next(
+            (other.start_ms for other in old_lines[position + 1 :] if other.start_ms is not None),
+            None,
+        )
+        for anchor in _line_anchors(line, assumed_end):
+            old_words.append(anchor)
+            word_origin.append(position)
+            word_measured.append(False)
+
+    # Letra inteira medida por verso: o resultado também sai por verso.
+    by_line_only = bool(old_lines) and not any(line.words for line in old_lines)
 
     # Achata os versos novos em tokens, guardando a que linha cada um pertence.
     slots: list[dict] = []
     for line_no, (text, _) in enumerate(parsed):
         for token in text.split():
             slots.append({"line": line_no, "text": token, "start": None, "end": None,
-                          "prob": 1.0, "matched": False})
+                          "prob": 1.0, "matched": False, "measured": False, "origin": None})
 
     matcher = SequenceMatcher(
         a=[normalize(word.text) for word in old_words],
@@ -122,6 +217,8 @@ def reconcile_timings(
             slot["end"] = source.end_ms
             slot["prob"] = source.probability
             slot["matched"] = True
+            slot["measured"] = word_measured[i1 + offset]
+            slot["origin"] = word_origin[i1 + offset]
 
     # Preenche os buracos, um trecho contíguo por vez.
     anchors = [
@@ -145,6 +242,7 @@ def reconcile_timings(
 
     # Redistribui os tokens nos versos novos.
     lines: list[Line] = []
+    fixados: set[int] = set()
     for line_no, (text, starts_stanza) in enumerate(parsed):
         mine = [slot for slot in slots if slot["line"] == line_no]
         words = [
@@ -158,17 +256,55 @@ def reconcile_timings(
         ]
         edited = any(not slot["matched"] for slot in mine)
         origin = old_lines[line_no] if line_no < len(old_lines) else None
+        pin = kept_pins[line_no] if line_no < len(kept_pins) else None
+
+        start_ms = words[0].start_ms if words else None
+        end_ms = words[-1].end_ms if words else None
+
+        # Verso que veio de letra medida por verso volta a sair por verso.
+        # Inventar palavras aqui seria fingir uma precisão que ninguém mediu, e
+        # `composition/versos.ts` já sabe desenhar o verso inteiro sem `words`.
+        heranca = [slot["origin"] for slot in mine if slot["matched"] and not slot["measured"]]
+        sem_medida = not any(slot["matched"] and slot["measured"] for slot in mine)
+        if mine and sem_medida and (by_line_only or heranca):
+            words = []
+            intacto = (
+                len(heranca) == len(mine)
+                and len(set(heranca)) == 1
+                and len(mine) == len(old_lines[heranca[0]].text.split())
+            )
+            if intacto:
+                # Verso inalterado: o tempo sai copiado como estava, inclusive o
+                # fim ausente — .lrc não mede fim, e inventar um seria mentira.
+                fonte = old_lines[heranca[0]]
+                start_ms, end_ms = fonte.start_ms, fonte.end_ms
+            else:
+                start_ms = min(int(slot["start"] or 0) for slot in mine)
+                end_ms = max(int(slot["end"] or 0) for slot in mine)
+
+        if pin is not None:
+            # O tempo fixado à mão vence o que o modelo mediu.
+            deslocamento = pin - start_ms if start_ms is not None else 0
+            words = _shift_to(words, pin)
+            end_ms = end_ms + deslocamento if end_ms is not None else None
+            start_ms = pin
+            fixados.add(line_no)
 
         lines.append(
             Line(
                 idx=line_no,
                 text=text,
                 words=words,
-                start_ms=words[0].start_ms if words else None,
-                end_ms=words[-1].end_ms if words else None,
-                starts_stanza=starts_stanza,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                starts_stanza=(
+                    kept_stanzas[line_no]
+                    if line_no < len(kept_stanzas) and kept_stanzas[line_no] is not None
+                    else starts_stanza
+                ),
                 # Só palavra inserida ou trocada exige realinhar; remover não.
-                needs_realign=edited,
+                # Tempo fixado à mão também: ninguém mediu aquele instante.
+                needs_realign=edited or pin is not None,
                 reviewed=_is_reviewed(
                     text=text,
                     origin=origin,
@@ -176,10 +312,44 @@ def reconcile_timings(
                     confirmed=kept_flags[line_no] if line_no < len(kept_flags) else False,
                 ),
                 # Ajuste de apresentação: corrigir o texto não o invalida.
-                nudge_ms=origin.nudge_ms if origin else 0,
+                nudge_ms=(
+                    kept_nudges[line_no]
+                    if line_no < len(kept_nudges) and kept_nudges[line_no] is not None
+                    else (origin.nudge_ms if origin else 0)
+                ),
             )
         )
+
+    _close_open_ends(lines, fixados)
     return lines
+
+
+def _close_open_ends(lines: list[Line], fixados: set[int]) -> None:
+    """Dá um fim plausível ao verso sem palavras que foi fixado à mão.
+
+    Um ponto de legenda novo não tem duração medida. Sem fim nenhum, o
+    preenchimento do karaokê completa de imediato e o verso fica parado em 100%
+    até o próximo — o palpite abaixo ao menos acompanha o tamanho do texto.
+
+    Só vale para os versos fixados à mão. Verso importado que ninguém tocou
+    continua com `end_ms=None`: o .lrc não mede fim, e inventar um aqui mudaria
+    calado o dado de toda letra importada.
+    """
+    for position, line in enumerate(lines):
+        if position not in fixados or line.end_ms is not None or line.words:
+            continue
+        if line.start_ms is None:
+            continue
+        palpite = line.start_ms + DEFAULT_WORD_MS * max(1, len(line.text.split()))
+        proximo = next(
+            (
+                other.start_ms
+                for other in lines[position + 1 :]
+                if other.start_ms is not None and other.start_ms > line.start_ms
+            ),
+            None,
+        )
+        line.end_ms = min(palpite, proximo) if proximo is not None else palpite
 
 
 def _is_reviewed(*, text: str, origin: Line | None, edited: bool, confirmed: bool) -> bool:

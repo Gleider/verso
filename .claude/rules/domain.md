@@ -30,10 +30,31 @@ Esta é a decisão estrutural do projeto.
 |---|---|
 | Editar o **texto** (`PUT /lyrics`) | cria `lyrics_version` nova, a anterior fica acessível |
 | Importar letra de fora | cria versão nova (`source=imported`) |
+| Acrescentar ou remover um verso | cria versão nova — é estrutura, não tempo |
 | Ajustar **tempo** (offset ou nudge) | altera **in-place**, sem versão nova |
+| Descartar uma versão (`DELETE .../versions/{id}`) | apaga, e a mais recente que sobrou assume |
 
 O motivo: versionamento é sobre **o que a letra diz**. Sincronia fina é um
 ajuste contínuo — uma versão por toque de tecla encheria o histórico de ruído.
+
+**É essa regra que o editor de letra aplica ao salvar** (`lib/rascunho.ts:oQueSalvar`):
+mexeu no texto, na estrutura ou fixou um tempo à mão, sai `PUT /lyrics` e nasce
+uma versão; mexeu só nos tempos, sai `PATCH /lyrics/nudges` e nada é versionado.
+
+### Mudar o timestamp de um verso é `nudge`, não sobrescrita
+
+O editor mostra o tempo **efetivo** (`medido + nudge − offset`), o mesmo que o
+vídeo desenha, e digitar um tempo novo ali vira `nudge_ms` — nunca um
+`UPDATE` no `start_ms` medido. Consequências que são o ponto:
+
+- o ajuste é reversível e o dado do modelo continua servindo para medir
+  qualidade, como manda a seção dos três controles de tempo;
+- o alcance é o do `nudge` (±30 s). Deslocamento maior que isso é deriva da
+  faixa inteira, e o lugar dela é o `lyrics_offset_ms`.
+
+A exceção é o **ponto de legenda novo**: ali não existe nada medido para
+preservar, então o tempo escrito à mão vai direto em `start_ms`, com
+`needs_realign = true` registrando que ninguém mediu aquele instante.
 
 ## Editar texto não pode destruir timing
 
@@ -85,6 +106,18 @@ marcada no editor. Mas **essa marcação vale só até um humano olhar**.
 - a marca sobrevive aos salvamentos seguintes.
 
 Uma linha revisada some do contador de pendências e perde o destaque vermelho.
+
+## Duas granularidades de tempo, e a segunda é a que quebra
+
+Uma letra aqui tem timing **por palavra** (veio do ASR) ou **por verso** (veio
+de `.lrc` ou do Musixmatch: `words` vazio, tempo só em `start_ms`, e `end_ms`
+nem existe — o LRC não mede fim).
+
+Todo código que consome timing responde pelas duas. Quem esquece a segunda não
+recebe erro: recebe um vídeo com a letra inteira amontoada no começo
+(`pitfalls.md` §35) ou uma tela sem letra nenhuma. `reconcile_timings` preserva
+a granularidade de entrada — letra por verso continua saindo por verso,
+palavra nenhuma inventada.
 
 ## Saneamento dos timings
 

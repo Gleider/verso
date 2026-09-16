@@ -1,5 +1,5 @@
 /**
- * Proporção da composição: 16:9 e 9:16 pela mesma técnica.
+ * Proporção da composição: paisagem e as três verticais, pela mesma técnica.
  *
  * Espaço de design FIXO por proporção, escalado por um fator único — não
  * layout responsivo. Um layout responsivo de verdade (tudo em % e vw) obriga
@@ -18,6 +18,9 @@ import type { AspectRatio, Resolucao, VideoSettings } from "./settings";
 export const DESIGN: Record<AspectRatio, { width: number; height: number }> = {
   "16:9": { width: 1920, height: 1080 },
   "9:16": { width: 1080, height: 1920 },
+  // Feed do Instagram: o mais alto que ele aceita sem cortar o quadro.
+  "4:5": { width: 1080, height: 1350 },
+  "1:1": { width: 1080, height: 1080 },
 };
 
 /** A resolução de SAÍDA. O lado curto manda: 720p é 720 px de lado curto. */
@@ -78,6 +81,22 @@ export const TIPOGRAFIA: Record<
   "9:16": {
     tamanho: { small: 44, medium: 72, large: 110 },
     tamanhoVizinho: 34,
+    margemLateral: 72,
+    larguraMaxima: 936,
+  },
+  // As três verticais têm a MESMA largura de design (1080), então o corpo da
+  // letra é o mesmo: o que cabe numa linha não muda. O que muda é a altura, e
+  // é dela que sai o tamanho do vizinho — em 1:1 não há folga para dois versos
+  // grandes um em cima do outro.
+  "4:5": {
+    tamanho: { small: 44, medium: 72, large: 110 },
+    tamanhoVizinho: 32,
+    margemLateral: 72,
+    larguraMaxima: 936,
+  },
+  "1:1": {
+    tamanho: { small: 42, medium: 68, large: 104 },
+    tamanhoVizinho: 30,
     margemLateral: 72,
     larguraMaxima: 936,
   },

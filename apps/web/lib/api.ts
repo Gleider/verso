@@ -1,5 +1,6 @@
 /** Chamadas ao backend. O browser fala direto com a API — ver nota abaixo. */
 
+import type { VersoRascunho } from "./rascunho";
 import type {
   Job,
   LyricsVersion,
@@ -68,15 +69,24 @@ export const api = {
 
   getLyrics: (id: string) => request<LyricsVersion>(`/tracks/${id}/lyrics`),
 
-  saveLyrics: (id: string, lines: string[], reviewed: boolean[] = []) =>
+  /**
+   * Salva a letra como uma versão nova.
+   *
+   * `start_ms` só viaja para o verso que teve o tempo escrito à mão (ponto de
+   * legenda novo): para todos os outros o servidor reaproveita o timing medido,
+   * que é o dado que o editor nem recebe de volta palavra a palavra.
+   */
+  saveLyrics: (id: string, versos: VersoRascunho[]) =>
     request<LyricsVersion>(`/tracks/${id}/lyrics`, {
       method: "PUT",
       body: JSON.stringify({
-        lines: lines.map((text, idx) => ({
+        lines: versos.map((verso, idx) => ({
           idx,
-          text,
-          starts_stanza: false,
-          reviewed: reviewed[idx] ?? false,
+          text: verso.texto,
+          starts_stanza: verso.abreEstrofe,
+          reviewed: verso.revisado,
+          start_ms: verso.fixado ? verso.medidoMs : null,
+          nudge_ms: verso.nudgeMs,
         })),
       }),
     }),
@@ -90,6 +100,10 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ nudges }),
     }),
+
+  /** Renomeia o projeto. O nome nasce do metadado do mp3, mas é do usuário. */
+  updateTrack: (id: string, dados: { title?: string; artist?: string | null }) =>
+    request<Track>(`/tracks/${id}`, { method: "PATCH", body: JSON.stringify(dados) }),
 
   /** Ajuste fino da letra: positivo adianta, negativo atrasa. */
   setOffset: (id: string, lyrics_offset_ms: number) =>
@@ -109,6 +123,12 @@ export const api = {
   activateVersion: (trackId: string, versionId: string) =>
     request<LyricsVersion>(`/tracks/${trackId}/lyrics/versions/${versionId}/activate`, {
       method: "POST",
+    }),
+
+  /** Apaga uma versão. A resposta traz a versão que passou a valer no lugar. */
+  discardVersion: (trackId: string, versionId: string) =>
+    request<LyricsVersion>(`/tracks/${trackId}/lyrics/versions/${versionId}`, {
+      method: "DELETE",
     }),
 
   /** Upload não usa `request`: multipart não leva Content-Type manual. */
@@ -220,12 +240,4 @@ export function formatDuration(ms: number | null | undefined): string {
   const minutes = Math.floor(total / 60);
   const seconds = total % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
-export function formatTimecode(ms: number | null): string {
-  if (ms === null || ms === undefined) return "--:--.--";
-  const minutes = Math.floor(ms / 60000);
-  const seconds = Math.floor((ms % 60000) / 1000);
-  const centis = Math.floor((ms % 1000) / 10);
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(centis).padStart(2, "0")}`;
 }

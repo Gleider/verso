@@ -219,3 +219,110 @@ def test_verso_novo_nasce_sem_ajuste():
 
     assert nova[0].nudge_ms == 400
     assert nova[1].nudge_ms == 0
+
+
+# ---------------------------------------------------------------------------
+# Letra com tempo por VERSO (.lrc e Musixmatch): não há palavra nenhuma para
+# ancorar o diff. Sem o tratamento abaixo, salvar uma correção jogava todos os
+# timestamps fora e recomeçava do zero — a letra inteira ia para os primeiros
+# segundos da música, sem erro nenhum.
+# ---------------------------------------------------------------------------
+
+
+def verso(texto: str, inicio: int | None, idx: int = 0) -> Line:
+    """Um verso importado: tem tempo de início, não tem palavras nem fim."""
+    return Line(idx=idx, text=texto, words=[], start_ms=inicio, end_ms=None,
+                starts_stanza=idx == 0)
+
+
+def test_letra_com_tempo_por_verso_sobrevive_a_um_salvamento():
+    antiga = [verso("o cachorro atravessou", 44440), verso("a casa amarela", 48200, 1)]
+
+    nova = reconcile_timings(antiga, ["o cachorro atravessou", "a casa amarela"])
+
+    assert [linha.start_ms for linha in nova] == [44440, 48200]
+    # Tempo por verso continua por verso: não inventamos palavras que ninguém mediu.
+    assert [linha.words for linha in nova] == [[], []]
+    assert [linha.end_ms for linha in nova] == [None, None]
+
+
+def test_corrigir_verso_sem_palavras_mantem_o_tempo_do_verso():
+    antiga = [verso("o cachoro atravessou", 44440), verso("a casa amarela", 48200, 1)]
+
+    nova = reconcile_timings(antiga, ["o cachorro atravessou", "a casa amarela"])
+
+    assert nova[0].start_ms == 44440
+    assert nova[1].start_ms == 48200
+    assert nova[0].words == []
+
+
+def test_verso_sem_palavras_nao_arrasta_os_seguintes_para_o_zero():
+    """O defeito original: tudo ia para 0, 300, 600… a partir do começo."""
+    antiga = [verso("primeiro verso", 60000), verso("segundo verso", 63000, 1)]
+
+    nova = reconcile_timings(antiga, ["primeiro verso", "segundo verso corrigido"])
+
+    assert nova[0].start_ms == 60000
+    assert nova[1].start_ms is not None and nova[1].start_ms >= 60000
+
+
+def test_ponto_de_legenda_novo_entra_no_tempo_pedido():
+    antiga = [verso("o cachorro atravessou", 10000), verso("a casa amarela", 20000, 1)]
+
+    nova = reconcile_timings(
+        antiga,
+        ["o cachorro atravessou", "verso inventado", "a casa amarela"],
+        pinned_ms=[None, 15000, None],
+    )
+
+    assert [linha.start_ms for linha in nova] == [10000, 15000, 20000]
+    assert nova[1].needs_realign is True
+
+
+def test_ponto_novo_no_fim_nao_precisa_de_vizinho_a_frente():
+    antiga = [verso("o cachorro atravessou", 10000)]
+
+    nova = reconcile_timings(antiga, ["o cachorro atravessou", "fim"], pinned_ms=[None, 90000])
+
+    assert nova[1].start_ms == 90000
+    assert nova[1].end_ms is not None and nova[1].end_ms > 90000
+
+
+def test_tempo_fixado_vence_o_timing_medido_das_palavras():
+    """Mover um verso pelo editor reposiciona as palavras dele junto."""
+    antiga = [linha("um dois tres", [w("um", 0, 200), w("dois", 200, 400), w("tres", 400, 600)])]
+
+    nova = reconcile_timings(antiga, ["um dois tres"], pinned_ms=[5000])
+
+    assert nova[0].start_ms == 5000
+    assert [p.start_ms for p in nova[0].words] == [5000, 5200, 5400]
+
+
+def test_ajuste_manual_informado_pelo_editor_vence_a_posicao():
+    """Inserir um verso no topo não pode empurrar o nudge de todos os outros."""
+    antiga = [
+        Line(idx=0, text="primeiro", words=[w("primeiro", 1000, 1500)], start_ms=1000,
+             end_ms=1500, nudge_ms=200),
+    ]
+
+    nova = reconcile_timings(
+        antiga,
+        ["novo", "primeiro"],
+        pinned_ms=[500, None],
+        nudges_ms=[0, 200],
+    )
+
+    assert nova[0].nudge_ms == 0
+    assert nova[1].nudge_ms == 200
+
+
+def test_estrofe_marcada_pelo_editor_sobrevive_ao_salvamento():
+    antiga = [
+        linha("primeiro", [w("primeiro", 0, 500)]),
+        Line(idx=1, text="segundo", words=[w("segundo", 500, 900)], start_ms=500, end_ms=900,
+             starts_stanza=True),
+    ]
+
+    nova = reconcile_timings(antiga, ["primeiro", "segundo"], stanza_flags=[True, True])
+
+    assert [linha.starts_stanza for linha in nova] == [True, True]

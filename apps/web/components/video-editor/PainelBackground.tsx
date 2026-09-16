@@ -6,8 +6,9 @@ import { BIBLIOTECA } from "@/composition/efeitos/fundos";
 import { api } from "@/lib/api";
 import type { AmbientId, AspectRatio, Resolucao } from "@/composition/settings";
 import type { VideoSettings } from "@/lib/types";
+import { formatarTimecode } from "@/lib/rascunho";
 import { BotaoDeGrupo } from "./BotaoDeGrupo";
-import { comoPorcento, Deslizador, Secao } from "./Controles";
+import { CampoDeTempo, comoPorcento, Deslizador, Secao } from "./Controles";
 
 const AMBIENTES: { id: AmbientId; rotulo: string; dica: string }[] = [
   { id: "breathe", rotulo: "Respiração", dica: "escala lenta com deriva suave" },
@@ -18,10 +19,20 @@ const AMBIENTES: { id: AmbientId; rotulo: string; dica: string }[] = [
   { id: "none", rotulo: "Nenhum", dica: "parado — só a batida ainda empurra" },
 ];
 
-const PROPORCOES: { id: AspectRatio; rotulo: string }[] = [
-  { id: "16:9", rotulo: "16:9 · paisagem" },
-  { id: "9:16", rotulo: "9:16 · retrato" },
+// O rótulo traz o destino, não só o número: é assim que a escolha é feita
+// ("vou postar no Reels"), e não por proporção.
+const PROPORCOES: { id: AspectRatio; rotulo: string; dica: string }[] = [
+  { id: "16:9", rotulo: "16:9", dica: "paisagem · YouTube" },
+  { id: "9:16", rotulo: "9:16", dica: "retrato · TikTok, Reels, Shorts" },
+  { id: "4:5", rotulo: "4:5", dica: "feed do Instagram" },
+  { id: "1:1", rotulo: "1:1", dica: "quadrado" },
 ];
+
+/** Os cortes que as redes pedem, em segundos. */
+const DURACOES_RAPIDAS = [15, 30, 60];
+
+/** Menor trecho que ainda é um vídeo, e não um piscar. */
+const MINIMO_DE_TRECHO_MS = 500;
 
 const RESOLUCOES: { id: Resolucao; rotulo: string }[] = [
   { id: "720p", rotulo: "720p" },
@@ -32,6 +43,10 @@ interface Props {
   trackId: string;
   settings: VideoSettings;
   hasBackground: boolean;
+  /** Duração da faixa: o teto do recorte. */
+  duracaoMs: number;
+  /** Lido só no clique — o preview não pode virar estado do React por quadro. */
+  tempoAtualMs: () => number;
   onChange: (settings: VideoSettings) => void;
   onBackgroundUploaded: () => void;
 }
@@ -41,6 +56,8 @@ export function PainelBackground({
   trackId,
   settings,
   hasBackground,
+  duracaoMs,
+  tempoAtualMs,
   onChange,
   onBackgroundUploaded,
 }: Props) {
@@ -49,6 +66,8 @@ export function PainelBackground({
   const [erro, setErro] = useState<string | null>(null);
   const { background } = settings;
   const dicaDoAmbiente = AMBIENTES.find((a) => a.id === background.ambient)?.dica;
+  const dicaDaProporcao = PROPORCOES.find((p) => p.id === settings.output.aspectRatio)?.dica;
+  const recorte = settings.output.recorte;
 
   function atualizar(parcial: Partial<VideoSettings["background"]>) {
     onChange({ ...settings, background: { ...background, ...parcial } });
@@ -72,6 +91,32 @@ export function PainelBackground({
     onChange({ ...settings, output: { ...settings.output, ...parcial } });
   }
 
+  /** Um trecho de trinta segundos a partir de onde o preview está. */
+  function trechoSugerido() {
+    const teto = duracaoMs > 0 ? duracaoMs : Number.MAX_SAFE_INTEGER;
+    const inicio = Math.min(Math.max(0, Math.round(tempoAtualMs())), teto - MINIMO_DE_TRECHO_MS);
+    return { inicioMs: inicio, fimMs: Math.min(inicio + 30_000, teto) };
+  }
+
+  /**
+   * Altera um lado do trecho mantendo o outro coerente.
+   *
+   * O ramo nunca sai daqui pela metade nem com o fim antes do começo: meio ramo
+   * vira NaN e a camada some do vídeo sem erro nenhum (`pitfalls.md` §33), e um
+   * trecho invertido renderiza um arquivo de zero quadro.
+   */
+  function mudarRecorte(parcial: { inicioMs?: number; fimMs?: number }) {
+    const base = recorte ?? trechoSugerido();
+    const teto = duracaoMs > 0 ? duracaoMs : Number.MAX_SAFE_INTEGER;
+    const inicioMs = Math.min(
+      Math.max(0, Math.round(parcial.inicioMs ?? base.inicioMs)),
+      teto - MINIMO_DE_TRECHO_MS,
+    );
+    const pedido = Math.round(parcial.fimMs ?? base.fimMs);
+    const fimMs = Math.min(Math.max(inicioMs + MINIMO_DE_TRECHO_MS, pedido), teto);
+    atualizarSaida({ recorte: { inicioMs, fimMs } });
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <Secao titulo="formato">
@@ -86,6 +131,7 @@ export function PainelBackground({
             </BotaoDeGrupo>
           ))}
         </div>
+        <span className="font-mono text-[11px] text-ink-3">{dicaDaProporcao}</span>
         <div className="flex flex-wrap gap-2">
           {RESOLUCOES.map((r) => (
             <BotaoDeGrupo
@@ -97,6 +143,60 @@ export function PainelBackground({
             </BotaoDeGrupo>
           ))}
         </div>
+      </Secao>
+
+      <Secao titulo="trecho">
+        <div className="flex flex-wrap gap-2">
+          <BotaoDeGrupo ativo={recorte === null} onClick={() => atualizarSaida({ recorte: null })}>
+            música inteira
+          </BotaoDeGrupo>
+          <BotaoDeGrupo
+            ativo={recorte !== null}
+            onClick={() => atualizarSaida({ recorte: recorte ?? trechoSugerido() })}
+          >
+            só um trecho
+          </BotaoDeGrupo>
+        </div>
+
+        {recorte === null ? (
+          <span className="font-mono text-[11px] text-ink-3">
+            {formatarTimecode(duracaoMs)} inteiros
+          </span>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <CampoDeTempo
+              rotulo="começa"
+              valorMs={recorte.inicioMs}
+              onChange={(ms) => mudarRecorte({ inicioMs: ms })}
+              onUsarTempoAtual={() => mudarRecorte({ inicioMs: tempoAtualMs() })}
+            />
+            <CampoDeTempo
+              rotulo="termina"
+              valorMs={recorte.fimMs}
+              onChange={(ms) => mudarRecorte({ fimMs: ms })}
+              onUsarTempoAtual={() => mudarRecorte({ fimMs: tempoAtualMs() })}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-[11px] text-amber">
+                {formatarTimecode(recorte.fimMs - recorte.inicioMs)} de vídeo
+              </span>
+              {DURACOES_RAPIDAS.map((segundos) => (
+                <button
+                  key={segundos}
+                  type="button"
+                  onClick={() => mudarRecorte({ fimMs: recorte.inicioMs + segundos * 1000 })}
+                  className="border border-line px-2 py-0.5 font-mono text-[10px] text-ink-3 hover:border-amber hover:text-amber"
+                >
+                  {segundos}s
+                </button>
+              ))}
+            </div>
+            <span className="text-[11px] text-ink-3">
+              O preview toca só o trecho. O MP4 sai com este pedaço e o vídeo inteiro, se já
+              existir, continua onde está.
+            </span>
+          </div>
+        )}
       </Secao>
 
       <Secao titulo="origem">

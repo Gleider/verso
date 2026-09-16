@@ -50,11 +50,25 @@ describe("escalaDeDesign", () => {
     expect(escalaDeDesign(comFormato("9:16", "1080p"))).toBeCloseTo(1, 5);
   });
 
-  it("é igual nas duas proporções para a mesma resolução", () => {
-    // O lado curto do espaço de design é 1080 nas duas — trocar de proporção
-    // não pode mudar a nitidez do resultado.
-    const paisagem = escalaDeDesign(comFormato("16:9", "720p"));
-    const retrato = escalaDeDesign(comFormato("9:16", "720p"));
-    expect(paisagem).toBeCloseTo(retrato, 5);
+  it("é igual em TODAS as proporções para a mesma resolução", () => {
+    // O lado curto do espaço de design é 1080 em todas — trocar de proporção
+    // não pode mudar a nitidez do resultado. É o que permite acrescentar um
+    // formato novo (4:5, 1:1) sem recalibrar nada.
+    const referencia = escalaDeDesign(comFormato("16:9", "720p"));
+    for (const aspectRatio of Object.keys(DESIGN) as AspectRatio[]) {
+      expect(escalaDeDesign(comFormato(aspectRatio, "720p"))).toBeCloseTo(referencia, 5);
+    }
+  });
+
+  it("cada proporção sai com a forma que o nome promete", () => {
+    const forma = (aspectRatio: AspectRatio) => {
+      const { width, height } = dimensoesDaSaida(comFormato(aspectRatio, "1080p"));
+      return width / height;
+    };
+
+    expect(forma("16:9")).toBeCloseTo(16 / 9, 2);
+    expect(forma("9:16")).toBeCloseTo(9 / 16, 2);
+    expect(forma("4:5")).toBeCloseTo(4 / 5, 2);
+    expect(forma("1:1")).toBeCloseTo(1, 2);
   });
 });

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from verso_asr.base import Word
@@ -106,6 +106,9 @@ async def save_lyrics(
         _to_domain(current),
         [line.text for line in ordered],
         reviewed_flags=[line.reviewed for line in ordered],
+        pinned_ms=[line.start_ms for line in ordered],
+        nudges_ms=[line.nudge_ms for line in ordered],
+        stanza_flags=[line.starts_stanza for line in ordered],
     )
 
     version = await create_version(
@@ -291,6 +294,56 @@ async def activate_version(
     await session.commit()
     await session.refresh(target, ["lines"])
     return target
+
+
+@router.delete("/versions/{version_id}", response_model=LyricsVersionOut)
+async def discard_version(
+    track_id: uuid.UUID,
+    version_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> LyricsVersion:
+    """Apaga uma versão da letra e devolve a que passa a valer.
+
+    Salvar nunca sobrescreve (é a regra do módulo), mas um salvamento que saiu
+    errado fica no caminho de tudo que vem depois: ele vira a base do próximo
+    diff de timing. Descartar é a saída — e é por isso que ela não é silenciosa:
+    a resposta traz a versão que ficou ativa no lugar.
+    """
+    target = await session.get(LyricsVersion, version_id)
+    if target is None or target.track_id != track_id:
+        raise HTTPException(status_code=404, detail="Versão não encontrada nesta faixa.")
+
+    total = await session.scalar(
+        select(func.count(LyricsVersion.id)).where(LyricsVersion.track_id == track_id)
+    )
+    if (total or 0) <= 1:
+        raise HTTPException(
+            status_code=409,
+            detail="Esta é a única versão da letra. Edite-a em vez de descartá-la.",
+        )
+
+    await session.delete(target)
+    await session.flush()
+
+    # A mais recente que sobrou assume — inclusive quando a apagada não era a ativa,
+    # porque uma faixa sem versão ativa não tem letra nenhuma no editor.
+    survivor = await session.scalar(
+        select(LyricsVersion)
+        .where(LyricsVersion.track_id == track_id)
+        .options(selectinload(LyricsVersion.lines))
+        .order_by(LyricsVersion.is_active.desc(), LyricsVersion.version_no.desc())
+        .limit(1)
+    )
+    if survivor is None:  # defensivo: a contagem acima já garante que há outra
+        raise HTTPException(status_code=409, detail="Não sobrou nenhuma versão da letra.")
+
+    await session.execute(
+        update(LyricsVersion).where(LyricsVersion.track_id == track_id).values(is_active=False)
+    )
+    survivor.is_active = True
+    await session.commit()
+    await session.refresh(survivor, ["lines"])
+    return survivor
 
 
 @router.get("/export")

@@ -1,4 +1,5 @@
 import type { MovimentoId } from "./efeitos/movimento";
+import { type Recorte, recorteValido } from "./tempo";
 
 /**
  * O que o editor de vídeo configura, e o que a composição lê.
@@ -11,7 +12,16 @@ import type { MovimentoId } from "./efeitos/movimento";
  * ajustada in-place.
  */
 
-export type AspectRatio = "16:9" | "9:16";
+/**
+ * As proporções que o projeto sabe desenhar.
+ *
+ * As três verticais existem porque é onde o vídeo é consumido: 9:16 é
+ * TikTok/Reels/Shorts, 4:5 é o feed do Instagram (o formato mais alto que o
+ * feed aceita sem cortar) e 1:1 é o quadrado que serve em qualquer lugar.
+ * Cada uma tem tipografia AUTORAL em `formato.ts` — não derivada por regra de
+ * três, que é o que faz letra de 16:9 chegar minúscula no retrato.
+ */
+export type AspectRatio = "16:9" | "9:16" | "4:5" | "1:1";
 export type Resolucao = "720p" | "1080p";
 
 /** Movimento contínuo da imagem de fundo. */
@@ -219,12 +229,20 @@ export type VideoSettings = {
     aspectRatio: AspectRatio;
     resolution: Resolucao;
     fps: number;
+    /**
+     * O trecho que vira vídeo. `null` = a música inteira.
+     *
+     * Existe para o corte de rede social: um refrão de vinte segundos, não os
+     * três minutos e meio. O recorte não muda a composição — ver
+     * `tempo.ts:janelaDeQuadros`.
+     */
+    recorte: Recorte | null;
   };
 };
 
 export type { MovimentoId };
 
-export const SETTINGS_VERSION = 5;
+export const SETTINGS_VERSION = 6;
 
 export const SETTINGS_PADRAO: VideoSettings = {
   background: {
@@ -305,6 +323,7 @@ export const SETTINGS_PADRAO: VideoSettings = {
     aspectRatio: "16:9",
     resolution: "1080p",
     fps: 30,
+    recorte: null,
   },
 };
 
@@ -338,6 +357,14 @@ export function normalizarSettings(bruto: unknown): VideoSettings {
     style: { ...SETTINGS_PADRAO.style, ...b.style },
     visualizer: { ...SETTINGS_PADRAO.visualizer, ...b.visualizer },
     particulas: { ...SETTINGS_PADRAO.particulas, ...b.particulas },
-    output: { ...SETTINGS_PADRAO.output, ...b.output },
+    // `recorte` é um ramo inteiro ou `null`, nunca meio preenchido: metade
+    // dele vira NaN, e NaN não desenha nada (`pitfalls.md` §33).
+    output: {
+      ...SETTINGS_PADRAO.output,
+      ...b.output,
+      recorte: recorteValido(b.output?.recorte)
+        ? { inicioMs: b.output.recorte.inicioMs, fimMs: b.output.recorte.fimMs }
+        : null,
+    },
   };
 }

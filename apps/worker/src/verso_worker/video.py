@@ -103,7 +103,12 @@ async def render_track_video(
         await _fail(job_uuid, "Esta faixa ainda não tem duração medida.")
         raise RenderError("Esta faixa ainda não tem duração medida.")
 
-    output_key = f"renders/{track_id}-{resolution}.mp4"
+    # O recorte entra na chave do arquivo: sem ele, exportar um trecho de vinte
+    # segundos sobrescreveria o vídeo inteiro que já estava ali — e o job
+    # anterior continuaria apontando para o caminho, agora com outro conteúdo.
+    recorte = (video_settings.get("output") or {}).get("recorte")
+    sufixo = f"-{recorte['inicioMs']}-{recorte['fimMs']}" if recorte else ""
+    output_key = f"renders/{track_id}-{resolution}{sufixo}.mp4"
     output_path = settings.verso_storage_dir / output_key
 
     try:
@@ -145,6 +150,13 @@ async def render_track_video(
                 stage="pronto",
                 progress=1.0,
                 output_key=output_key,
+                # O trecho fica registrado no job: é o que distingue, na lista
+                # de vídeos prontos, um corte curto do vídeo inteiro.
+                params=(
+                    {"resolution": resolution, "recorteMs": [recorte["inicioMs"], recorte["fimMs"]]}
+                    if recorte
+                    else {"resolution": resolution}
+                ),
                 finished_at=datetime.now(UTC),
             )
         )

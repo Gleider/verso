@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { formatarTimecode } from "@/lib/rascunho";
+import type { Recorte } from "@/composition/tempo";
 import type { Job } from "@/lib/types";
 
 const RESOLUTIONS = ["720p", "1080p"] as const;
@@ -10,7 +12,16 @@ type Resolution = (typeof RESOLUTIONS)[number];
 /** Enquanto houver render em andamento, consulta o estado periodicamente. */
 const POLL_MS = 2500;
 
-export function VideoExport({ trackId, disabled }: { trackId: string; disabled: boolean }) {
+export function VideoExport({
+  trackId,
+  disabled,
+  recorte = null,
+}: {
+  trackId: string;
+  disabled: boolean;
+  /** Trecho escolhido no editor, se houver — só para dizer o que vai sair. */
+  recorte?: Recorte | null;
+}) {
   const [renders, setRenders] = useState<Job[]>([]);
   const [starting, setStarting] = useState<Resolution | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +79,13 @@ export function VideoExport({ trackId, disabled }: { trackId: string; disabled: 
         ))}
       </div>
 
+      {recorte && (
+        <p className="border-l-2 border-amber bg-surface px-3 py-1.5 font-mono text-[11px] text-ink-2">
+          sai só o trecho {formatarTimecode(recorte.inicioMs)} → {formatarTimecode(recorte.fimMs)}
+          {"  "}({formatarTimecode(recorte.fimMs - recorte.inicioMs)})
+        </p>
+      )}
+
       {disabled && (
         <p className="text-sm text-ink-2">
           O vídeo usa a letra sincronizada — ele fica disponível quando a transcrição terminar.
@@ -84,6 +102,9 @@ export function VideoExport({ trackId, disabled }: { trackId: string; disabled: 
         <ul className="flex flex-col gap-1">
           {renders.slice(0, 4).map((job) => {
             const resolution = (job.params?.resolution as string) ?? "vídeo";
+            // O worker grava o trecho no job: é o que distingue, aqui, um
+            // corte curto do vídeo inteiro — os dois viram "1080p" sem isto.
+            const trecho = job.params?.recorteMs as [number, number] | undefined;
             const percent = Math.round(job.progress * 100);
 
             return (
@@ -91,7 +112,15 @@ export function VideoExport({ trackId, disabled }: { trackId: string; disabled: 
                 key={job.id}
                 className="flex items-center gap-3 border border-line-soft bg-surface px-3 py-2"
               >
-                <span className="font-mono text-xs text-ink-2">{resolution}</span>
+                <span className="font-mono text-xs text-ink-2">
+                  {resolution}
+                  {trecho && (
+                    <span className="text-ink-3">
+                      {" "}
+                      · {formatarTimecode(trecho[0])}→{formatarTimecode(trecho[1])}
+                    </span>
+                  )}
+                </span>
 
                 {job.state === "done" ? (
                   <>

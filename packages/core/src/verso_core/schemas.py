@@ -36,13 +36,23 @@ class LyricLineOut(BaseModel):
 
 
 class LyricLineIn(BaseModel):
-    """Um verso como o editor o devolve. Sem timings: o servidor os reaproveita."""
+    """Um verso como o editor o devolve.
+
+    O timing medido continua vindo do servidor: quem o reaproveita é
+    `reconcile_timings`. Os dois campos de tempo aqui são exceções declaradas
+    pelo editor — o tempo que a pessoa fixou à mão e o ajuste por verso, que
+    precisa viajar por identidade e não por posição (inserir um verso no topo
+    empurraria o ajuste de todos os de baixo).
+    """
 
     idx: int
     text: str
     starts_stanza: bool = False
     # O editor pode confirmar uma linha sem alterar o texto ("ouvi, está certo").
     reviewed: bool = False
+    # Ponto de legenda novo, ou verso reposicionado à mão. Vence o timing medido.
+    start_ms: int | None = Field(default=None, ge=0)
+    nudge_ms: int | None = Field(default=None, ge=-30_000, le=30_000)
 
 
 class LyricsVersionOut(BaseModel):
@@ -149,9 +159,11 @@ class TrackCreated(BaseModel):
 
 
 class TrackUpdate(BaseModel):
-    title: str | None = None
-    artist: str | None = None
-    album: str | None = None
+    # O nome vem do metadado do arquivo, mas é do projeto — renomear é esperado.
+    # `min_length` existe porque uma faixa sem nome some da biblioteca.
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    artist: str | None = Field(default=None, max_length=200)
+    album: str | None = Field(default=None, max_length=200)
     lyrics_offset_ms: int | None = Field(
         default=None,
         ge=-30_000,
@@ -323,16 +335,38 @@ class ParticulasSettings(BaseModel):
     cor: str | None = None
 
 
+class RecorteSettings(BaseModel):
+    """O trecho da música que vira vídeo. `fimMs` é exclusivo.
+
+    Existe para o corte de rede social: um refrão de vinte segundos em vez dos
+    três minutos e meio. Ou o ramo inteiro chega, ou ele é `null` — meio ramo
+    vira NaN do lado TypeScript e a camada some sem erro (`pitfalls.md` §33).
+    """
+
+    inicioMs: int = Field(default=0, ge=0)
+    fimMs: int = Field(default=1, gt=0)
+
+    @model_validator(mode="after")
+    def _fim_depois_do_comeco(self) -> RecorteSettings:
+        if self.fimMs <= self.inicioMs:
+            raise ValueError("O fim do trecho precisa vir depois do começo.")
+        return self
+
+
 class OutputSettings(BaseModel):
-    aspectRatio: Literal["16:9", "9:16"] = "16:9"
+    # As três verticais são onde o vídeo é consumido: 9:16 (TikTok, Reels,
+    # Shorts), 4:5 (feed do Instagram) e 1:1 (quadrado). Espelha `AspectRatio`
+    # de `composition/settings.ts`.
+    aspectRatio: Literal["16:9", "9:16", "4:5", "1:1"] = "16:9"
     resolution: Literal["720p", "1080p"] = "1080p"
     fps: int = Field(default=30, ge=1, le=60)
+    recorte: RecorteSettings | None = None
 
 
 #: Espelha `SETTINGS_VERSION` de `composition/settings.ts`. Sobe quando o
 #: formato muda; a leitura continua tolerante (campo que falta vira padrão dos
 #: dois lados), então isto é diagnóstico, não porta de migração.
-VERSAO_DO_FORMATO = 5
+VERSAO_DO_FORMATO = 6
 
 
 class VideoSettings(BaseModel):
